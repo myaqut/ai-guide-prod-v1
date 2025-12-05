@@ -1,11 +1,41 @@
-// Update this page (the content is just a fallback if you fail to update the page)
+import { ExtensionPopup } from "@/components/extension/ExtensionPopup";
 
 const Index = () => {
   return (
-    <div className="flex min-h-screen items-center justify-center bg-background">
-      <div className="text-center">
-        <h1 className="mb-4 text-4xl font-bold">Welcome to Your Blank App</h1>
-        <p className="text-xl text-muted-foreground">Start building your amazing project here!</p>
+    <div className="min-h-screen bg-gradient-dark flex items-center justify-center p-4">
+      {/* Background decoration */}
+      <div className="absolute inset-0 overflow-hidden pointer-events-none">
+        <div className="absolute top-1/4 left-1/4 w-96 h-96 bg-primary/5 rounded-full blur-3xl" />
+        <div className="absolute bottom-1/4 right-1/4 w-96 h-96 bg-accent/5 rounded-full blur-3xl" />
+      </div>
+
+      {/* Main content */}
+      <div className="relative z-10 flex flex-col items-center gap-8">
+        {/* Title section */}
+        <div className="text-center space-y-3 max-w-md">
+          <h1 className="text-3xl font-bold text-foreground">
+            Catalog <span className="text-gradient">AI</span> Assistant
+          </h1>
+          <p className="text-sm text-muted-foreground">
+            Chrome extension popup preview. This is how the extension appears when activated on a LeanIX catalog page.
+          </p>
+        </div>
+
+        {/* Extension popup preview */}
+        <div className="relative">
+          {/* Glow effect behind the popup */}
+          <div className="absolute inset-0 bg-primary/10 blur-2xl rounded-3xl scale-105" />
+          
+          <ExtensionPopup />
+        </div>
+
+        {/* Instructions */}
+        <div className="text-center space-y-2 max-w-sm">
+          <p className="text-xs text-muted-foreground">
+            Click the <span className="text-foreground font-medium">Settings</span> icon to configure your OpenAI API key, 
+            then click <span className="text-foreground font-medium">Refresh</span> to generate AI recommendations.
+          </p>
+        </div>
       </div>
     </div>
   );

@@ -1,0 +1,101 @@
+import { FieldCard } from "./FieldCard";
+import { RefreshCw, Sparkles } from "lucide-react";
+import { Button } from "@/components/ui/button";
+
+export interface FieldRecommendation {
+  fieldName: string;
+  fieldId: string;
+  currentValue?: string;
+  recommendation?: string;
+  confidence?: number;
+  reasoning?: string;
+  isLoading?: boolean;
+}
+
+interface RecommendationListProps {
+  recommendations: FieldRecommendation[];
+  isAnalyzing: boolean;
+  onRefresh: () => void;
+  onApply: (fieldId: string, value: string) => void;
+}
+
+export const RecommendationList = ({
+  recommendations,
+  isAnalyzing,
+  onRefresh,
+  onApply,
+}: RecommendationListProps) => {
+  const hasRecommendations = recommendations.some(r => r.recommendation);
+
+  return (
+    <div className="flex flex-col h-full">
+      {/* Action Bar */}
+      <div className="flex items-center justify-between px-4 py-2 border-b border-border bg-muted/30">
+        <div className="flex items-center gap-2">
+          <Sparkles className="w-3.5 h-3.5 text-primary" />
+          <span className="text-xs font-medium text-foreground">
+            {isAnalyzing ? "Analyzing page..." : `${recommendations.length} fields detected`}
+          </span>
+        </div>
+        <Button
+          variant="ghost"
+          size="xs"
+          onClick={onRefresh}
+          disabled={isAnalyzing}
+          className="text-muted-foreground hover:text-foreground"
+        >
+          <RefreshCw className={`w-3 h-3 ${isAnalyzing ? "animate-spin" : ""}`} />
+          Refresh
+        </Button>
+      </div>
+
+      {/* Recommendations */}
+      <div className="flex-1 overflow-y-auto p-3 space-y-2">
+        {recommendations.length === 0 ? (
+          <div className="flex flex-col items-center justify-center h-full text-center px-4">
+            <div className="w-12 h-12 rounded-full bg-muted flex items-center justify-center mb-3">
+              <Sparkles className="w-6 h-6 text-muted-foreground" />
+            </div>
+            <h3 className="text-sm font-medium text-foreground mb-1">No fields detected</h3>
+            <p className="text-xs text-muted-foreground max-w-[200px]">
+              Navigate to a LeanIX catalog page to see AI recommendations for form fields.
+            </p>
+          </div>
+        ) : (
+          recommendations.map((rec) => (
+            <FieldCard
+              key={rec.fieldId}
+              fieldName={rec.fieldName}
+              currentValue={rec.currentValue}
+              recommendation={rec.recommendation}
+              confidence={rec.confidence}
+              reasoning={rec.reasoning}
+              isLoading={rec.isLoading}
+              onApply={(value) => onApply(rec.fieldId, value)}
+            />
+          ))
+        )}
+      </div>
+
+      {/* Footer */}
+      {hasRecommendations && (
+        <div className="px-4 py-2 border-t border-border bg-muted/30">
+          <Button
+            variant="glow"
+            className="w-full"
+            onClick={() => {
+              recommendations.forEach(rec => {
+                if (rec.recommendation) {
+                  onApply(rec.fieldId, rec.recommendation);
+                }
+              });
+            }}
+          >
+            <Sparkles className="w-4 h-4" />
+            Apply All Recommendations
+          </Button>
+        </div>
+      )}
+    </div>
+  );
+};
