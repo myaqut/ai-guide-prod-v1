@@ -28,7 +28,7 @@ export const RecommendationList = ({
   const hasRecommendations = recommendations.some(r => r.recommendation);
 
   return (
-    <div className="flex flex-col h-full">
+    <div className="flex flex-col flex-1 min-h-0">
       {/* Action Bar */}
       <div className="flex items-center justify-between px-4 py-2 border-b border-border bg-muted/30">
         <div className="flex items-center gap-2">
