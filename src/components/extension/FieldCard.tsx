@@ -1,0 +1,139 @@
+import { useState } from "react";
+import { Check, Copy, ChevronDown, ChevronUp, Lightbulb, Loader2 } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { cn } from "@/lib/utils";
+
+interface FieldCardProps {
+  fieldName: string;
+  currentValue?: string;
+  recommendation?: string;
+  confidence?: number;
+  reasoning?: string;
+  isLoading?: boolean;
+  onApply?: (value: string) => void;
+}
+
+export const FieldCard = ({
+  fieldName,
+  currentValue,
+  recommendation,
+  confidence,
+  reasoning,
+  isLoading,
+  onApply,
+}: FieldCardProps) => {
+  const [copied, setCopied] = useState(false);
+  const [expanded, setExpanded] = useState(false);
+
+  const handleCopy = async () => {
+    if (!recommendation) return;
+    await navigator.clipboard.writeText(recommendation);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
+  };
+
+  const handleApply = () => {
+    if (recommendation && onApply) {
+      onApply(recommendation);
+    }
+  };
+
+  const getConfidenceColor = (conf: number) => {
+    if (conf >= 0.8) return "text-success";
+    if (conf >= 0.5) return "text-warning";
+    return "text-muted-foreground";
+  };
+
+  const getConfidenceLabel = (conf: number) => {
+    if (conf >= 0.8) return "High";
+    if (conf >= 0.5) return "Medium";
+    return "Low";
+  };
+
+  return (
+    <div className="rounded-lg border border-border bg-card p-3 animate-slide-up">
+      {/* Field Header */}
+      <div className="flex items-start justify-between mb-2">
+        <div className="flex-1">
+          <h3 className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
+            {fieldName}
+          </h3>
+          {currentValue && (
+            <p className="text-sm text-foreground/70 mt-0.5 truncate max-w-[200px]">
+              Current: {currentValue}
+            </p>
+          )}
+        </div>
+        {confidence !== undefined && (
+          <div className={cn("text-[10px] font-medium px-1.5 py-0.5 rounded bg-muted", getConfidenceColor(confidence))}>
+            {getConfidenceLabel(confidence)} ({Math.round(confidence * 100)}%)
+          </div>
+        )}
+      </div>
+
+      {/* Recommendation */}
+      {isLoading ? (
+        <div className="flex items-center gap-2 py-3">
+          <div className="flex gap-1">
+            <div className="w-1.5 h-1.5 rounded-full bg-primary animate-typing-dot" />
+            <div className="w-1.5 h-1.5 rounded-full bg-primary animate-typing-dot" />
+            <div className="w-1.5 h-1.5 rounded-full bg-primary animate-typing-dot" />
+          </div>
+          <span className="text-xs text-muted-foreground">Analyzing...</span>
+        </div>
+      ) : recommendation ? (
+        <>
+          <div className="bg-muted/50 rounded-md p-2 mb-2">
+            <div className="flex items-start gap-2">
+              <Lightbulb className="w-3.5 h-3.5 text-primary mt-0.5 shrink-0" />
+              <p className="text-sm text-foreground font-medium break-words">
+                {recommendation}
+              </p>
+            </div>
+          </div>
+
+          {/* Reasoning toggle */}
+          {reasoning && (
+            <button
+              onClick={() => setExpanded(!expanded)}
+              className="flex items-center gap-1 text-[10px] text-muted-foreground hover:text-foreground transition-colors mb-2"
+            >
+              {expanded ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />}
+              {expanded ? "Hide" : "Show"} reasoning
+            </button>
+          )}
+
+          {expanded && reasoning && (
+            <p className="text-xs text-muted-foreground bg-muted/30 rounded p-2 mb-2 animate-fade-in">
+              {reasoning}
+            </p>
+          )}
+
+          {/* Actions */}
+          <div className="flex gap-2">
+            <Button
+              variant="glow"
+              size="xs"
+              onClick={handleApply}
+              className="flex-1"
+            >
+              <Check className="w-3 h-3" />
+              Apply
+            </Button>
+            <Button
+              variant="outline"
+              size="xs"
+              onClick={handleCopy}
+            >
+              {copied ? <Check className="w-3 h-3" /> : <Copy className="w-3 h-3" />}
+            </Button>
+          </div>
+        </>
+      ) : (
+        <p className="text-xs text-muted-foreground py-2">
+          No recommendation available
+        </p>
+      )}
+    </div>
+  );
+};
