@@ -61,6 +61,24 @@ export const RecommendationList = ({
               Navigate to a LeanIX catalog page to see AI recommendations for form fields.
             </p>
           </div>
+        ) : !hasRecommendations && !isAnalyzing ? (
+          <div className="flex flex-col items-center justify-center h-full text-center px-4">
+            <div className="w-12 h-12 rounded-full bg-primary/10 flex items-center justify-center mb-3">
+              <Sparkles className="w-6 h-6 text-primary" />
+            </div>
+            <h3 className="text-sm font-medium text-foreground mb-1">{recommendations.length} fields ready</h3>
+            <p className="text-xs text-muted-foreground max-w-[200px] mb-4">
+              Click below to generate AI-powered recommendations for these fields.
+            </p>
+            <Button
+              variant="glow"
+              onClick={onRefresh}
+              className="gap-2"
+            >
+              <Sparkles className="w-4 h-4" />
+              Generate Recommendations
+            </Button>
+          </div>
         ) : (
           recommendations.map((rec) => (
             <FieldCard
