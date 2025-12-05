@@ -17,6 +17,7 @@ interface RecommendationListProps {
   isAnalyzing: boolean;
   onRefresh: () => void;
   onApply: (fieldId: string, value: string) => void;
+  activeFieldId?: string | null;
 }
 
 export const RecommendationList = ({
@@ -24,6 +25,7 @@ export const RecommendationList = ({
   isAnalyzing,
   onRefresh,
   onApply,
+  activeFieldId,
 }: RecommendationListProps) => {
   const hasRecommendations = recommendations.some(r => r.recommendation);
 
@@ -92,6 +94,7 @@ export const RecommendationList = ({
               confidence={rec.confidence}
               reasoning={rec.reasoning}
               isLoading={rec.isLoading}
+              isActive={rec.fieldId === activeFieldId}
               onApply={(value) => onApply(rec.fieldId, value)}
             />
           ))

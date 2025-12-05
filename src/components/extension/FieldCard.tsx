@@ -10,6 +10,7 @@ interface FieldCardProps {
   confidence?: number;
   reasoning?: string;
   isLoading?: boolean;
+  isActive?: boolean;
   onApply?: (value: string) => void;
 }
 
@@ -20,6 +21,7 @@ export const FieldCard = ({
   confidence,
   reasoning,
   isLoading,
+  isActive,
   onApply,
 }: FieldCardProps) => {
   const [copied, setCopied] = useState(false);
@@ -51,7 +53,12 @@ export const FieldCard = ({
   };
 
   return (
-    <div className="rounded-lg border border-border bg-card p-3 animate-slide-up">
+    <div className={cn(
+      "rounded-lg border bg-card p-3 animate-slide-up transition-all",
+      isActive 
+        ? "border-primary ring-2 ring-primary/20 shadow-md" 
+        : "border-border"
+    )}>
       {/* Field Header */}
       <div className="flex items-start justify-between mb-2">
         <div className="flex-1">
