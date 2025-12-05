@@ -24,9 +24,11 @@ const Index = () => {
         {/* Extension popup preview */}
         <div className="relative">
           {/* Glow effect behind the popup */}
-          <div className="absolute inset-0 bg-primary/10 blur-2xl rounded-3xl scale-105" />
+          <div className="absolute inset-0 bg-primary/10 blur-2xl rounded-3xl scale-105 pointer-events-none" />
           
-          <ExtensionPopup />
+          <div className="relative z-10">
+            <ExtensionPopup />
+          </div>
         </div>
 
         {/* Instructions */}

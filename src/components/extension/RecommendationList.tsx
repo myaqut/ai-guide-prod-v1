@@ -72,7 +72,10 @@ export const RecommendationList = ({
             </p>
             <Button
               variant="glow"
-              onClick={onRefresh}
+              onClick={() => {
+                console.log('Button onClick fired!');
+                onRefresh();
+              }}
               className="gap-2"
             >
               <Sparkles className="w-4 h-4" />
