@@ -32,8 +32,8 @@ const Index = () => {
         {/* Instructions */}
         <div className="text-center space-y-2 max-w-sm">
           <p className="text-xs text-muted-foreground">
-            Click the <span className="text-foreground font-medium">Settings</span> icon to configure your OpenAI API key, 
-            then click <span className="text-foreground font-medium">Refresh</span> to generate AI recommendations.
+            Click <span className="text-foreground font-medium">Refresh</span> to generate AI recommendations
+            for the detected catalog fields using OpenAI.
           </p>
         </div>
       </div>
