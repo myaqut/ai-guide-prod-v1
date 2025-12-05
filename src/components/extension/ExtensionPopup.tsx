@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { Header } from "./Header";
 import { SettingsPanel } from "./SettingsPanel";
 import { RecommendationList, FieldRecommendation } from "./RecommendationList";
@@ -51,6 +51,46 @@ export const ExtensionPopup = () => {
   const [recommendations, setRecommendations] = useState<FieldRecommendation[]>([]);
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [pageContext, setPageContext] = useState("LeanIX IT Component");
+  const [activeFieldId, setActiveFieldId] = useState<string | null>(null);
+
+  // Handle active field change from content script
+  const handleActiveFieldChange = useCallback((field: FieldData) => {
+    console.log('[ExtensionPopup] Active field changed:', field);
+    setActiveFieldId(field.fieldId);
+    
+    // Check if field already exists in recommendations
+    setRecommendations(prev => {
+      const exists = prev.some(r => r.fieldId === field.fieldId);
+      if (exists) {
+        // Update existing field and move to top
+        const updated = prev.filter(r => r.fieldId !== field.fieldId);
+        const existingField = prev.find(r => r.fieldId === field.fieldId)!;
+        return [{ ...existingField, currentValue: field.currentValue }, ...updated];
+      } else {
+        // Add new field at the top
+        return [{ ...field, isLoading: false }, ...prev];
+      }
+    });
+    
+    toast.info(`Field detected: ${field.fieldName}`, { duration: 2000 });
+  }, []);
+
+  // Listen for messages from content script via background worker
+  useEffect(() => {
+    if (!isExtension) return;
+
+    const messageListener = (message: any) => {
+      if (message.action === 'activeFieldChanged' && message.field) {
+        handleActiveFieldChange(message.field);
+      }
+    };
+
+    chrome.runtime.onMessage.addListener(messageListener);
+    
+    return () => {
+      chrome.runtime.onMessage.removeListener(messageListener);
+    };
+  }, [handleActiveFieldChange]);
 
   // Load fields from the page on mount
   useEffect(() => {
@@ -205,6 +245,7 @@ export const ExtensionPopup = () => {
             isAnalyzing={isAnalyzing}
             onRefresh={handleGenerateRecommendations}
             onApply={handleApply}
+            activeFieldId={activeFieldId}
           />
         </>
       )}
