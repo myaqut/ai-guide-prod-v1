@@ -293,23 +293,25 @@
   }
 }
 
-/* Extension popup specific styles */
+/* Extension side panel specific styles */
 .extension-popup {
-  width: 400px;
-  min-width: 400px;
-  height: 500px;
-  min-height: 500px;
-  max-height: 600px;
+  width: 100%;
+  min-width: 320px;
+  height: 100vh;
+  min-height: 100vh;
   display: flex;
   flex-direction: column;
 }
 
-/* Chrome extension popup body reset */
+/* Chrome extension side panel body reset */
 html, body {
-  min-width: 400px;
-  min-height: 500px;
+  width: 100%;
+  min-width: 320px;
+  height: 100vh;
   margin: 0;
   padding: 0;
+  overflow-y: auto;
+  overflow-x: hidden;
 }
 
 /* Scrollbar styling */
