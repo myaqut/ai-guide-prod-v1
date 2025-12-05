@@ -295,12 +295,21 @@
 
 /* Extension popup specific styles */
 .extension-popup {
-  width: 380px;
-  height: 480px;
-  min-height: 480px;
+  width: 400px;
+  min-width: 400px;
+  height: 500px;
+  min-height: 500px;
   max-height: 600px;
   display: flex;
   flex-direction: column;
+}
+
+/* Chrome extension popup body reset */
+html, body {
+  min-width: 400px;
+  min-height: 500px;
+  margin: 0;
+  padding: 0;
 }
 
 /* Scrollbar styling */
