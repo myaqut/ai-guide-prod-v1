@@ -1,9 +1,5 @@
-import { useState } from "react";
-import { ArrowLeft, Key, Save, Eye, EyeOff, ExternalLink } from "lucide-react";
+import { ArrowLeft, Key, CheckCircle, ExternalLink, Cloud } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { toast } from "sonner";
 
 interface SettingsPanelProps {
   onBack: () => void;
@@ -11,23 +7,7 @@ interface SettingsPanelProps {
   onSaveApiKey: (key: string) => void;
 }
 
-export const SettingsPanel = ({ onBack, apiKey, onSaveApiKey }: SettingsPanelProps) => {
-  const [key, setKey] = useState(apiKey);
-  const [showKey, setShowKey] = useState(false);
-
-  const handleSave = () => {
-    if (!key.trim()) {
-      toast.error("Please enter an API key");
-      return;
-    }
-    if (!key.startsWith("sk-")) {
-      toast.error("Invalid API key format. Should start with 'sk-'");
-      return;
-    }
-    onSaveApiKey(key.trim());
-    toast.success("API key saved successfully");
-  };
-
+export const SettingsPanel = ({ onBack }: SettingsPanelProps) => {
   return (
     <div className="flex flex-col h-full">
       {/* Header */}
@@ -45,66 +25,34 @@ export const SettingsPanel = ({ onBack, apiKey, onSaveApiKey }: SettingsPanelPro
 
       {/* Content */}
       <div className="flex-1 p-4 space-y-6 overflow-y-auto">
-        {/* API Key Section */}
+        {/* API Key Status */}
         <div className="space-y-3">
           <div className="flex items-center gap-2">
             <Key className="w-4 h-4 text-primary" />
-            <Label className="text-sm font-medium">OpenAI API Key</Label>
+            <span className="text-sm font-medium">OpenAI API Key</span>
           </div>
           
-          <div className="space-y-2">
-            <div className="relative">
-              <Input
-                type={showKey ? "text" : "password"}
-                value={key}
-                onChange={(e) => setKey(e.target.value)}
-                placeholder="sk-..."
-                className="pr-10 bg-muted/50 border-border focus:border-primary"
-              />
-              <button
-                type="button"
-                onClick={() => setShowKey(!showKey)}
-                className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors"
-              >
-                {showKey ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-              </button>
+          <div className="rounded-lg bg-success/10 border border-success/20 p-3 flex items-start gap-3">
+            <CheckCircle className="w-5 h-5 text-success shrink-0 mt-0.5" />
+            <div>
+              <p className="text-sm font-medium text-success">Configured via Cloud</p>
+              <p className="text-xs text-muted-foreground mt-1">
+                Your OpenAI API key is securely stored in Lovable Cloud. No additional setup needed.
+              </p>
             </div>
-            
-            <p className="text-[10px] text-muted-foreground">
-              Your API key is stored locally and never sent to our servers.
-            </p>
           </div>
-
-          <Button
-            variant="glow"
-            size="sm"
-            onClick={handleSave}
-            className="w-full"
-          >
-            <Save className="w-3 h-3" />
-            Save API Key
-          </Button>
         </div>
 
-        {/* Info Section */}
-        <div className="rounded-lg bg-muted/30 p-3 space-y-2">
-          <h3 className="text-xs font-medium text-foreground">How to get an API key</h3>
-          <ol className="text-[10px] text-muted-foreground space-y-1 list-decimal list-inside">
-            <li>Go to OpenAI Platform</li>
-            <li>Sign in or create an account</li>
-            <li>Navigate to API Keys section</li>
-            <li>Create a new secret key</li>
-            <li>Copy and paste it here</li>
-          </ol>
-          <a
-            href="https://platform.openai.com/api-keys"
-            target="_blank"
-            rel="noopener noreferrer"
-            className="inline-flex items-center gap-1 text-[10px] text-primary hover:underline mt-2"
-          >
-            <ExternalLink className="w-3 h-3" />
-            Open OpenAI Platform
-          </a>
+        {/* Cloud Info */}
+        <div className="rounded-lg bg-primary/10 border border-primary/20 p-3 space-y-2">
+          <div className="flex items-center gap-2">
+            <Cloud className="w-4 h-4 text-primary" />
+            <h3 className="text-xs font-medium text-foreground">Powered by Lovable Cloud</h3>
+          </div>
+          <p className="text-[10px] text-muted-foreground">
+            This extension uses Lovable Cloud for secure API key storage and AI processing. 
+            Your data never leaves our secure infrastructure.
+          </p>
         </div>
 
         {/* Naming Convention */}
@@ -116,9 +64,35 @@ export const SettingsPanel = ({ onBack, apiKey, onSaveApiKey }: SettingsPanelPro
           <code className="block text-[10px] bg-muted rounded px-2 py-1 text-primary font-mono">
             [Provider] + [Product] + [Version]
           </code>
-          <p className="text-[10px] text-muted-foreground">
-            Example: <span className="text-foreground">MongoDB Community Server 8.2</span>
-          </p>
+          <div className="text-[10px] text-muted-foreground space-y-0.5 mt-2">
+            <p><span className="text-foreground">Example:</span> MongoDB Community Server 8.2</p>
+            <p><span className="text-foreground">Example:</span> Oracle Database Enterprise 19c</p>
+            <p><span className="text-foreground">Example:</span> Apache Kafka 3.5</p>
+          </div>
+        </div>
+
+        {/* How It Works */}
+        <div className="rounded-lg bg-muted/30 p-3 space-y-2">
+          <h3 className="text-xs font-medium text-foreground">How It Works</h3>
+          <ol className="text-[10px] text-muted-foreground space-y-1 list-decimal list-inside">
+            <li>Extension detects form fields on the page</li>
+            <li>AI analyzes the context and current values</li>
+            <li>Suggestions are generated following best practices</li>
+            <li>Click Apply to fill in the recommended value</li>
+          </ol>
+        </div>
+
+        {/* Links */}
+        <div className="flex flex-col gap-2">
+          <a
+            href="https://docs.lovable.dev/features/cloud"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="inline-flex items-center gap-1 text-[10px] text-primary hover:underline"
+          >
+            <ExternalLink className="w-3 h-3" />
+            Learn about Lovable Cloud
+          </a>
         </div>
       </div>
     </div>
