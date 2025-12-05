@@ -3,6 +3,54 @@
 
 console.log('[LeanIX AI] Content script loaded');
 
+// Fields to ignore
+const IGNORED_FIELDS = [
+  'external id',
+  'externalid',
+  'external_id',
+  'product id',
+  'productid',
+  'product_id',
+];
+
+// Store for currently focused/active field
+let activeField = null;
+
+// Check if field should be ignored
+function shouldIgnoreField(fieldName, fieldId) {
+  const nameLower = (fieldName || '').toLowerCase().trim();
+  const idLower = (fieldId || '').toLowerCase().trim();
+  
+  return IGNORED_FIELDS.some(ignored => 
+    nameLower.includes(ignored) || 
+    idLower.includes(ignored) ||
+    nameLower === ignored ||
+    idLower === ignored
+  );
+}
+
+// Listen for focus events on input fields
+document.addEventListener('focusin', (event) => {
+  const element = event.target;
+  if (element.matches('input, textarea, select, [contenteditable="true"]')) {
+    const fieldData = extractFieldData(element);
+    if (fieldData && !shouldIgnoreField(fieldData.fieldName, fieldData.fieldId)) {
+      activeField = fieldData;
+      console.log('[LeanIX AI] Active field detected:', activeField);
+      
+      // Notify popup about new active field
+      try {
+        chrome.runtime.sendMessage({
+          action: 'activeFieldChanged',
+          field: activeField
+        });
+      } catch (e) {
+        // Popup might not be open
+      }
+    }
+  }
+}, true);
+
 // Listen for messages from the popup
 chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
   console.log('[LeanIX AI] Received message:', request);
@@ -11,6 +59,9 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
     const pageData = extractPageData();
     console.log('[LeanIX AI] Extracted page data:', pageData);
     sendResponse(pageData);
+  } else if (request.action === 'getActiveField') {
+    console.log('[LeanIX AI] Returning active field:', activeField);
+    sendResponse({ field: activeField });
   } else if (request.action === 'applyRecommendation') {
     const result = applyFieldValue(request.fieldId, request.value);
     console.log('[LeanIX AI] Apply result:', result);
@@ -51,10 +102,6 @@ function extractPageData() {
     // Description field  
     '[data-field-id="description"]',
     '[name="description"]',
-    // External ID
-    '[data-field-id="externalId"]',
-    '[data-field-id="external_id"]',
-    '[name="externalId"]',
     // Form inputs with name attributes
     'input[name]',
     'textarea[name]',
@@ -68,6 +115,11 @@ function extractPageData() {
       document.querySelectorAll(selector).forEach(element => {
         const fieldData = extractFieldData(element);
         if (fieldData && !processedIds.has(fieldData.fieldId)) {
+          // Skip ignored fields
+          if (shouldIgnoreField(fieldData.fieldName, fieldData.fieldId)) {
+            console.log('[LeanIX AI] Ignoring field:', fieldData.fieldName);
+            return;
+          }
           processedIds.add(fieldData.fieldId);
           fields.push(fieldData);
         }
@@ -85,6 +137,11 @@ function extractPageData() {
       if (input) {
         const fieldData = extractFieldData(input, label.textContent);
         if (fieldData && !processedIds.has(fieldData.fieldId)) {
+          // Skip ignored fields
+          if (shouldIgnoreField(fieldData.fieldName, fieldData.fieldId)) {
+            console.log('[LeanIX AI] Ignoring field:', fieldData.fieldName);
+            return;
+          }
           processedIds.add(fieldData.fieldId);
           fields.push(fieldData);
         }
@@ -92,9 +149,17 @@ function extractPageData() {
     }
   });
   
+  // If there's an active field, make sure it's included
+  if (activeField && !processedIds.has(activeField.fieldId)) {
+    if (!shouldIgnoreField(activeField.fieldName, activeField.fieldId)) {
+      fields.unshift(activeField);
+    }
+  }
+  
   return {
     pageContext: pageTitle,
-    fields: fields.slice(0, 20)
+    fields: fields.slice(0, 20),
+    activeField: activeField
   };
 }
 
