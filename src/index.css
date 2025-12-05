@@ -296,8 +296,11 @@
 /* Extension popup specific styles */
 .extension-popup {
   width: 380px;
+  height: 480px;
   min-height: 480px;
   max-height: 600px;
+  display: flex;
+  flex-direction: column;
 }
 
 /* Scrollbar styling */
