@@ -13,10 +13,10 @@ const Index = () => {
       <div className="relative z-10 flex flex-col items-center gap-8">
         {/* Title section */}
         <div className="text-center space-y-3 max-w-md">
-          <h1 className="text-3xl font-bold text-foreground">
-            Catalog <span className="text-gradient">AI</span> Assistant
+          <h1 className="text-3xl font-bold text-white">
+            Catalog <span className="text-primary">AI</span> Assistant
           </h1>
-          <p className="text-sm text-muted-foreground">
+          <p className="text-sm text-slate-400">
             Chrome extension popup preview. This is how the extension appears when activated on a LeanIX catalog page.
           </p>
         </div>
@@ -33,9 +33,9 @@ const Index = () => {
 
         {/* Instructions */}
         <div className="text-center space-y-2 max-w-sm">
-          <p className="text-xs text-muted-foreground">
-            Click <span className="text-foreground font-medium">Refresh</span> to generate AI recommendations
-            for the detected catalog fields using OpenAI.
+          <p className="text-xs text-slate-400">
+            Click <span className="text-white font-medium">Refresh</span> to generate AI recommendations
+            for the detected catalog fields.
           </p>
         </div>
       </div>
