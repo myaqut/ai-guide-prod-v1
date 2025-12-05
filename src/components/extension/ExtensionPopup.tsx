@@ -42,7 +42,10 @@ export const ExtensionPopup = () => {
   );
   const [isAnalyzing, setIsAnalyzing] = useState(false);
 
+  console.log('ExtensionPopup mounted, isAnalyzing:', isAnalyzing);
+
   const handleGenerateRecommendations = async () => {
+    console.log('Generate recommendations clicked!');
     setIsAnalyzing(true);
     
     // Set all fields to loading
