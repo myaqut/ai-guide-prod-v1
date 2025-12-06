@@ -53,27 +53,81 @@ export const ExtensionPopup = () => {
   const [pageContext, setPageContext] = useState("LeanIX IT Component");
   const [activeFieldId, setActiveFieldId] = useState<string | null>(null);
 
+  // Generate recommendation for a single field
+  const generateSingleFieldRecommendation = useCallback(async (field: FieldData) => {
+    console.log('[ExtensionPopup] Generating recommendation for field:', field.fieldName);
+    
+    // Set this field to loading
+    setRecommendations(prev => 
+      prev.map(r => r.fieldId === field.fieldId ? { ...r, isLoading: true } : r)
+    );
+
+    try {
+      const results = await generateRecommendations([field], pageContext);
+      const rec = results.find(r => r.fieldId === field.fieldId);
+      
+      setRecommendations(prev => 
+        prev.map(r => r.fieldId === field.fieldId 
+          ? { 
+              ...r, 
+              recommendation: rec?.recommendation,
+              confidence: rec?.confidence,
+              reasoning: rec?.reasoning,
+              isLoading: false 
+            } 
+          : r
+        )
+      );
+      
+      if (rec?.recommendation) {
+        toast.success(`Recommendation ready for ${field.fieldName}`);
+      }
+    } catch (error) {
+      console.error('Error generating recommendation for field:', field.fieldId, error);
+      setRecommendations(prev => 
+        prev.map(r => r.fieldId === field.fieldId ? { ...r, isLoading: false } : r)
+      );
+      toast.error(`Failed to get recommendation for ${field.fieldName}`);
+    }
+  }, [pageContext]);
+
   // Handle active field change from content script
   const handleActiveFieldChange = useCallback((field: FieldData) => {
     console.log('[ExtensionPopup] Active field changed:', field);
     setActiveFieldId(field.fieldId);
     
     // Check if field already exists in recommendations
-    setRecommendations(prev => {
-      const exists = prev.some(r => r.fieldId === field.fieldId);
-      if (exists) {
-        // Update existing field and move to top
+    const existingField = recommendations.find(r => r.fieldId === field.fieldId);
+    
+    if (existingField) {
+      // Move to top and update current value
+      setRecommendations(prev => {
         const updated = prev.filter(r => r.fieldId !== field.fieldId);
-        const existingField = prev.find(r => r.fieldId === field.fieldId)!;
         return [{ ...existingField, currentValue: field.currentValue }, ...updated];
-      } else {
-        // Add new field at the top
-        return [{ ...field, isLoading: false }, ...prev];
-      }
-    });
+      });
+    } else {
+      // Add new field at the top with loading state and auto-generate
+      const newField = { ...field, isLoading: true };
+      setRecommendations(prev => [newField, ...prev]);
+      
+      // Auto-generate recommendation for new field
+      generateSingleFieldRecommendation(field);
+    }
     
     toast.info(`Field detected: ${field.fieldName}`, { duration: 2000 });
-  }, []);
+  }, [recommendations, generateSingleFieldRecommendation]);
+
+  // Handle refresh for a single field
+  const handleRefreshField = useCallback((fieldId: string) => {
+    const field = recommendations.find(r => r.fieldId === fieldId);
+    if (field) {
+      generateSingleFieldRecommendation({
+        fieldId: field.fieldId,
+        fieldName: field.fieldName,
+        currentValue: field.currentValue,
+      });
+    }
+  }, [recommendations, generateSingleFieldRecommendation]);
 
   // Listen for messages from content script via background worker
   useEffect(() => {
@@ -244,6 +298,7 @@ export const ExtensionPopup = () => {
             recommendations={recommendations}
             isAnalyzing={isAnalyzing}
             onRefresh={handleGenerateRecommendations}
+            onRefreshField={handleRefreshField}
             onApply={handleApply}
             activeFieldId={activeFieldId}
           />

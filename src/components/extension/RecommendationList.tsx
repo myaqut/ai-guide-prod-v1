@@ -16,6 +16,7 @@ interface RecommendationListProps {
   recommendations: FieldRecommendation[];
   isAnalyzing: boolean;
   onRefresh: () => void;
+  onRefreshField: (fieldId: string) => void;
   onApply: (fieldId: string, value: string) => void;
   activeFieldId?: string | null;
 }
@@ -24,6 +25,7 @@ export const RecommendationList = ({
   recommendations,
   isAnalyzing,
   onRefresh,
+  onRefreshField,
   onApply,
   activeFieldId,
 }: RecommendationListProps) => {
@@ -88,6 +90,7 @@ export const RecommendationList = ({
           recommendations.map((rec) => (
             <FieldCard
               key={rec.fieldId}
+              fieldId={rec.fieldId}
               fieldName={rec.fieldName}
               currentValue={rec.currentValue}
               recommendation={rec.recommendation}
@@ -96,6 +99,7 @@ export const RecommendationList = ({
               isLoading={rec.isLoading}
               isActive={rec.fieldId === activeFieldId}
               onApply={(value) => onApply(rec.fieldId, value)}
+              onRefresh={() => onRefreshField(rec.fieldId)}
             />
           ))
         )}

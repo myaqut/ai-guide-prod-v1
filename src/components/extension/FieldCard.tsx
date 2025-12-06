@@ -1,9 +1,10 @@
 import { useState } from "react";
-import { Check, Copy, ChevronDown, ChevronUp, Lightbulb, Loader2 } from "lucide-react";
+import { Check, Copy, ChevronDown, ChevronUp, Lightbulb, RefreshCw } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 
 interface FieldCardProps {
+  fieldId: string;
   fieldName: string;
   currentValue?: string;
   recommendation?: string;
@@ -12,9 +13,11 @@ interface FieldCardProps {
   isLoading?: boolean;
   isActive?: boolean;
   onApply?: (value: string) => void;
+  onRefresh?: () => void;
 }
 
 export const FieldCard = ({
+  fieldId,
   fieldName,
   currentValue,
   recommendation,
@@ -23,6 +26,7 @@ export const FieldCard = ({
   isLoading,
   isActive,
   onApply,
+  onRefresh,
 }: FieldCardProps) => {
   const [copied, setCopied] = useState(false);
   const [expanded, setExpanded] = useState(false);
@@ -62,9 +66,21 @@ export const FieldCard = ({
       {/* Field Header */}
       <div className="flex items-start justify-between mb-2">
         <div className="flex-1">
-          <h3 className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
-            {fieldName}
-          </h3>
+          <div className="flex items-center gap-2">
+            <h3 className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
+              {fieldName}
+            </h3>
+            <Button
+              variant="ghost"
+              size="xs"
+              onClick={onRefresh}
+              disabled={isLoading}
+              className="h-5 w-5 p-0 text-muted-foreground hover:text-foreground"
+              title="Refresh recommendation"
+            >
+              <RefreshCw className={cn("w-3 h-3", isLoading && "animate-spin")} />
+            </Button>
+          </div>
           {currentValue && (
             <p className="text-sm text-foreground/70 mt-0.5 truncate max-w-[200px]">
               Current: {currentValue}
