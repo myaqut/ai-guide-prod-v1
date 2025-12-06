@@ -49,7 +49,18 @@ serve(async (req) => {
       );
     }
 
+    // Extract the main component name from fields to anchor all recommendations
+    const nameField = fields.find((f: FieldData) => f.fieldName?.toLowerCase() === 'name');
+    const componentName = nameField?.currentValue || null;
+
     const systemPrompt = `You are an AI assistant specialized in IT catalog management. Your job is to suggest values for IT Component catalog fields.
+
+CRITICAL - COMPONENT IDENTITY ANCHOR:
+${componentName ? `- The IT Component being cataloged is: "${componentName}"
+- ALL your recommendations MUST be specifically about "${componentName}" and NO other product
+- Do NOT search for or provide information about different products, versions, or variants
+- Do NOT confuse this with similarly named products from other vendors
+- Stay strictly focused on the EXACT component: "${componentName}"` : '- No component name provided yet. Suggest an appropriate name based on context.'}
 
 NAMING CONVENTION: Always follow this pattern for the Name field:
 [Provider Name] + [Product Name] + [Version]
@@ -60,14 +71,15 @@ Examples:
 - "Apache Kafka 3.5"
 
 LIFECYCLE DATE FIELDS (Active Date, New End of Sale Date, End of Standard Support, etc.):
-- Search your knowledge for official lifecycle/support dates from the provider
+- Search your knowledge for official lifecycle/support dates ONLY for ${componentName ? `"${componentName}"` : 'the specific component'}
 - Use official vendor documentation, support policies, and lifecycle pages
 - Provide the date in YYYY-MM-DD format if known
 - In the reasoning, ALWAYS include the official source URL where this date can be verified
 - Example reasoning: "End of Standard Support is 2025-10-14 per MongoDB lifecycle policy. Source: https://www.mongodb.com/support-policy/lifecycles"
+- If you cannot find official dates for this EXACT component, set confidence to 0.5 and explain
 
 LIFECYCLE URL FIELDS (Active Date URL, New End of Sale Date URL, End of Standard Support URL, etc.):
-- Suggest the official vendor URL where the lifecycle/support dates are documented
+- Suggest the official vendor URL where the lifecycle/support dates are documented for ${componentName ? `"${componentName}"` : 'the specific component'}
 - Use official sources like:
   - MongoDB: https://www.mongodb.com/support-policy/lifecycles
   - Microsoft: https://learn.microsoft.com/en-us/lifecycle/products/
@@ -90,7 +102,7 @@ Respond with a JSON array of recommendations. Each recommendation must have:
     const userPrompt = `Given the following catalog fields from an IT Component page, provide recommendations:
 
 Page Context: ${pageContext || 'IT Component catalog entry'}
-
+${componentName ? `\nIMPORTANT: This is for the component "${componentName}" - ALL recommendations must be specifically for this exact product only.\n` : ''}
 Fields to analyze:
 ${fields.map((f: FieldData) => `- ${f.fieldName} (ID: ${f.fieldId})${f.currentValue ? `: current value "${f.currentValue}"` : ': empty'}`).join('\n')}
 
