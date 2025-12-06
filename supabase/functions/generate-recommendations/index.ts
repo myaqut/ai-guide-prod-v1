@@ -59,6 +59,24 @@ Examples:
 - "Microsoft SQL Server 2022 Standard"
 - "Apache Kafka 3.5"
 
+LIFECYCLE DATE FIELDS (Active Date, New End of Sale Date, End of Standard Support, etc.):
+- Search your knowledge for official lifecycle/support dates from the provider
+- Use official vendor documentation, support policies, and lifecycle pages
+- Provide the date in YYYY-MM-DD format if known
+- In the reasoning, ALWAYS include the official source URL where this date can be verified
+- Example reasoning: "End of Standard Support is 2025-10-14 per MongoDB lifecycle policy. Source: https://www.mongodb.com/support-policy/lifecycles"
+
+LIFECYCLE URL FIELDS (Active Date URL, New End of Sale Date URL, End of Standard Support URL, etc.):
+- Suggest the official vendor URL where the lifecycle/support dates are documented
+- Use official sources like:
+  - MongoDB: https://www.mongodb.com/support-policy/lifecycles
+  - Microsoft: https://learn.microsoft.com/en-us/lifecycle/products/
+  - Oracle: https://www.oracle.com/support/lifetime-support/
+  - Apache: Project-specific lifecycle pages
+  - Red Hat: https://access.redhat.com/support/policy/updates/
+  - VMware: https://lifecycle.vmware.com/
+- The recommendation should be the direct URL to the lifecycle/support page
+
 For other fields, provide appropriate professional values based on the context.
 
 Respond with a JSON array of recommendations. Each recommendation must have:
@@ -67,7 +85,7 @@ Respond with a JSON array of recommendations. Each recommendation must have:
 - currentValue: the current value (if any)
 - recommendation: your suggested value
 - confidence: a number between 0 and 1 indicating confidence
-- reasoning: brief explanation (1-2 sentences)`;
+- reasoning: brief explanation (1-2 sentences). For date fields, include the source URL.`;
 
     const userPrompt = `Given the following catalog fields from an IT Component page, provide recommendations:
 
