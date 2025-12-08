@@ -34,9 +34,11 @@ const dateFieldUrlCache: Record<string, string[]> = {};
 
 // Check if a field is a lifecycle-related field (date or URL)
 function isLifecycleField(fieldName: string): boolean {
-  const lifecycleKeywords = ['active', 'end of sale', 'end of support', 'end of life', 'lifecycle', 'eol', 'eos', 'release'];
-  const lowerName = fieldName.toLowerCase();
-  return lifecycleKeywords.some(keyword => lowerName.includes(keyword));
+  const lifecycleKeywords = ['active', 'end of sale', 'end of support', 'end of life', 'lifecycle', 'eol', 'eos', 'release', 'standard support', 'endoflife'];
+  // Normalize: remove parentheses and extra spaces for matching
+  const lowerName = fieldName.toLowerCase().replace(/[()]/g, '').replace(/\s+/g, ' ');
+  const fieldId = fieldName.toLowerCase().replace(/[_-]/g, ''); // Also check camelCase fieldId
+  return lifecycleKeywords.some(keyword => lowerName.includes(keyword) || fieldId.includes(keyword.replace(/\s+/g, '')));
 }
 
 // Check if this is a URL field that should use cached URL from date search
