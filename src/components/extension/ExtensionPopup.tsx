@@ -336,6 +336,17 @@ export const ExtensionPopup = () => {
     }
   };
 
+  const handleEditValue = (fieldId: string, value: string) => {
+    console.log('[ExtensionPopup] Manual edit - updating field value:', fieldId, value);
+    setRecommendations(prev =>
+      prev.map(r =>
+        r.fieldId === fieldId
+          ? { ...r, recommendation: value }
+          : r
+      )
+    );
+  };
+
   return (
     <div className="extension-popup flex flex-col bg-background overflow-hidden rounded-lg border border-border shadow-lg">
       {showSettings ? (
@@ -356,6 +367,7 @@ export const ExtensionPopup = () => {
             onRefresh={handleGenerateRecommendations}
             onRefreshField={handleRefreshField}
             onApply={handleApply}
+            onEditValue={handleEditValue}
             activeFieldId={activeFieldId}
           />
         </>
