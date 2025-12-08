@@ -32,7 +32,7 @@ export const FieldCard = ({
   const [copied, setCopied] = useState(false);
   const [expanded, setExpanded] = useState(false);
   const [isEditing, setIsEditing] = useState(false);
-  const [editedValue, setEditedValue] = useState(recommendation || "");
+  const [editedValue, setEditedValue] = useState("");
 
   const handleCopy = async () => {
     const valueToCopy = isEditing ? editedValue : recommendation;
@@ -43,21 +43,22 @@ export const FieldCard = ({
   };
 
   const handleApply = () => {
-    const valueToApply = isEditing ? editedValue : recommendation;
+    const valueToApply = isEditing ? editedValue.trim() : recommendation;
+    console.log('[FieldCard] handleApply called - isEditing:', isEditing, 'editedValue:', editedValue, 'valueToApply:', valueToApply);
     if (valueToApply && onApply) {
-      console.log('[FieldCard] Applying value:', valueToApply, 'isEditing:', isEditing);
       onApply(valueToApply);
-      if (isEditing) {
-        setIsEditing(false);
-      }
+      setIsEditing(false);
     }
   };
 
-  const handleEditToggle = () => {
-    if (!isEditing) {
-      setEditedValue(recommendation || "");
-    }
-    setIsEditing(!isEditing);
+  const handleStartEdit = () => {
+    setEditedValue(recommendation || "");
+    setIsEditing(true);
+  };
+
+  const handleCancelEdit = () => {
+    setIsEditing(false);
+    setEditedValue("");
   };
 
   const getConfidenceColor = (conf: number) => {
@@ -173,7 +174,7 @@ export const FieldCard = ({
             <Button
               variant="outline"
               size="xs"
-              onClick={handleEditToggle}
+              onClick={isEditing ? handleCancelEdit : handleStartEdit}
               title={isEditing ? "Cancel edit" : "Edit manually"}
             >
               {isEditing ? <X className="w-3 h-3" /> : <Pencil className="w-3 h-3" />}
