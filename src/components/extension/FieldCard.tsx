@@ -45,8 +45,11 @@ export const FieldCard = ({
   const handleApply = () => {
     const valueToApply = isEditing ? editedValue : recommendation;
     if (valueToApply && onApply) {
+      console.log('[FieldCard] Applying value:', valueToApply, 'isEditing:', isEditing);
       onApply(valueToApply);
-      setIsEditing(false);
+      if (isEditing) {
+        setIsEditing(false);
+      }
     }
   };
 

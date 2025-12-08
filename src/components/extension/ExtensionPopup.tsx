@@ -91,7 +91,7 @@ export const ExtensionPopup = () => {
     }
   }, [pageContext]);
 
-  // Handle active field change from content script
+  // Handle active field change from content script - fetch recommendation for that field only
   const handleActiveFieldChange = useCallback((field: FieldData) => {
     console.log('[ExtensionPopup] Active field changed:', field);
     setActiveFieldId(field.fieldId);
@@ -105,12 +105,15 @@ export const ExtensionPopup = () => {
         const updated = prev.filter(r => r.fieldId !== field.fieldId);
         return [{ ...existingField, currentValue: field.currentValue }, ...updated];
       });
+      
+      // Only auto-generate if no recommendation exists yet
+      if (!existingField.recommendation && !existingField.isLoading) {
+        generateSingleFieldRecommendation(field);
+      }
     } else {
-      // Add new field at the top with loading state and auto-generate
+      // Add new field at the top and auto-generate
       const newField = { ...field, isLoading: true };
       setRecommendations(prev => [newField, ...prev]);
-      
-      // Auto-generate recommendation for new field
       generateSingleFieldRecommendation(field);
     }
     
@@ -146,7 +149,7 @@ export const ExtensionPopup = () => {
     };
   }, [handleActiveFieldChange]);
 
-  // Load fields from the page on mount
+  // Load fields from the page on mount - just load field list, don't fetch recommendations
   useEffect(() => {
     loadPageFields();
   }, []);
@@ -162,13 +165,14 @@ export const ExtensionPopup = () => {
           chrome.tabs.sendMessage(tab.id, { action: 'getPageData' }, (response) => {
             if (chrome.runtime.lastError) {
               console.error('Error getting page data:', chrome.runtime.lastError);
-              // Use mock data as fallback
+              // Use mock data as fallback - no auto-fetch
               setRecommendations(MOCK_FIELDS.map(f => ({ ...f, isLoading: false })));
               return;
             }
             
             if (response && response.fields && response.fields.length > 0) {
               setPageContext(response.pageContext || "LeanIX IT Component");
+              // Just load fields without recommendations - they'll be fetched on click
               setRecommendations(response.fields.map((f: FieldData) => ({ ...f, isLoading: false })));
             } else {
               // No fields found, use mock data
@@ -181,7 +185,7 @@ export const ExtensionPopup = () => {
         setRecommendations(MOCK_FIELDS.map(f => ({ ...f, isLoading: false })));
       }
     } else {
-      // Not running as extension, use mock data
+      // Not running as extension, use mock data - no auto-fetch
       setRecommendations(MOCK_FIELDS.map(f => ({ ...f, isLoading: false })));
     }
   };
