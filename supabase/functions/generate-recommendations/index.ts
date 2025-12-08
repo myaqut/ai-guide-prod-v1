@@ -431,6 +431,8 @@ serve(async (req) => {
                            field.fieldName.toLowerCase().includes('provider') ||
                            field.fieldName.toLowerCase().includes('category');
         
+        console.log(`Field "${field.fieldName}" - isLifecycleField: ${isLifecycleField(field.fieldName)}, needsSearch: ${needsSearch}, cacheKey: ${cacheKey}`);
+        
         if (needsSearch) {
           console.log(`Searching info for field: ${field.fieldName}`);
           const result = await searchFieldInfo(componentName, field.fieldName);
