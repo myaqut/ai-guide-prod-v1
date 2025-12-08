@@ -36,11 +36,17 @@ interface PerplexitySearchResult {
   sources: string[];
 }
 
-// Check if a field is a lifecycle-related field
+// Check if a field is a lifecycle-related field (date or URL)
 function isLifecycleField(fieldName: string): boolean {
-  const lifecycleKeywords = ['active', 'end of sale', 'end of support', 'end of life', 'lifecycle', 'eol', 'eos'];
+  const lifecycleKeywords = ['active', 'end of sale', 'end of support', 'end of life', 'lifecycle', 'eol', 'eos', 'release'];
   const lowerName = fieldName.toLowerCase();
   return lifecycleKeywords.some(keyword => lowerName.includes(keyword));
+}
+
+// Check if the field is a URL field related to dates
+function isDateUrlField(fieldName: string): boolean {
+  const lowerName = fieldName.toLowerCase();
+  return lowerName.includes('url') && isLifecycleField(fieldName);
 }
 
 // Search for lifecycle information using Perplexity API
@@ -71,7 +77,7 @@ async function searchLifecycleInfo(componentName: string): Promise<PerplexitySea
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
-        model: 'llama-3.1-sonar-large-128k-online',
+        model: 'sonar',
         messages: [
           {
             role: 'system',
@@ -251,7 +257,14 @@ LIFECYCLE DATE FIELDS (Active Date, New End of Sale Date, End of Standard Suppor
 - Example reasoning: "End of Standard Support is 2025-10-14 per official lifecycle policy. Source: https://www.vendor.com/lifecycle"
 - If the search results don't contain the exact date, set confidence to 0.5 and explain
 
+CRITICAL - DATE AND URL FIELD CONSISTENCY:
+- When providing "Active Date" and "Active Date URL", they MUST reference the SAME source
+- The "Active Date URL" should be the direct link to where the "Active Date" was found
+- Same for "End of Sale Date" + "End of Sale Date URL", "End of Standard Support" + "End of Standard Support URL"
+- Example: If Active Date is 2023-08-15 from https://vendor.com/lifecycle, then Active Date URL MUST be https://vendor.com/lifecycle
+
 LIFECYCLE URL FIELDS (Active Date URL, New End of Sale Date URL, End of Standard Support URL, etc.):
+- The URL field MUST point to the EXACT same source as the corresponding date field
 - USE THE LIFECYCLE URL FROM PERPLEXITY SEARCH RESULTS if available
 - The recommendation should be the direct URL to the lifecycle/support page
 - Common official sources:
@@ -269,7 +282,7 @@ Respond with a JSON array of recommendations. Each recommendation must have:
 - currentValue: the current value (if any)
 - recommendation: your suggested value
 - confidence: a number between 0 and 1 indicating confidence (use 0.9+ if from Perplexity search, 0.5 if uncertain)
-- reasoning: brief explanation (1-2 sentences). For date fields, ALWAYS include the source URL.`;
+- reasoning: brief explanation (1-2 sentences). For date fields, ALWAYS include the source URL. For URL fields, confirm it matches the date source.`;
 
     const userPrompt = `Given the following catalog fields from an IT Component page, provide recommendations:
 

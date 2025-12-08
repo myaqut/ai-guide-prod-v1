@@ -1,6 +1,7 @@
 import { useState } from "react";
-import { Check, Copy, ChevronDown, ChevronUp, Lightbulb, RefreshCw } from "lucide-react";
+import { Check, Copy, ChevronDown, ChevronUp, Lightbulb, RefreshCw, Pencil, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
 
 interface FieldCardProps {
@@ -30,18 +31,30 @@ export const FieldCard = ({
 }: FieldCardProps) => {
   const [copied, setCopied] = useState(false);
   const [expanded, setExpanded] = useState(false);
+  const [isEditing, setIsEditing] = useState(false);
+  const [editedValue, setEditedValue] = useState(recommendation || "");
 
   const handleCopy = async () => {
-    if (!recommendation) return;
-    await navigator.clipboard.writeText(recommendation);
+    const valueToCopy = isEditing ? editedValue : recommendation;
+    if (!valueToCopy) return;
+    await navigator.clipboard.writeText(valueToCopy);
     setCopied(true);
     setTimeout(() => setCopied(false), 2000);
   };
 
   const handleApply = () => {
-    if (recommendation && onApply) {
-      onApply(recommendation);
+    const valueToApply = isEditing ? editedValue : recommendation;
+    if (valueToApply && onApply) {
+      onApply(valueToApply);
+      setIsEditing(false);
     }
+  };
+
+  const handleEditToggle = () => {
+    if (!isEditing) {
+      setEditedValue(recommendation || "");
+    }
+    setIsEditing(!isEditing);
   };
 
   const getConfidenceColor = (conf: number) => {
@@ -104,19 +117,29 @@ export const FieldCard = ({
           </div>
           <span className="text-xs text-muted-foreground">Analyzing...</span>
         </div>
-      ) : recommendation ? (
+      ) : recommendation || isEditing ? (
         <>
           <div className="bg-muted/50 rounded-md p-2 mb-2">
             <div className="flex items-start gap-2">
               <Lightbulb className="w-3.5 h-3.5 text-primary mt-0.5 shrink-0" />
-              <p className="text-sm text-foreground font-medium break-words">
-                {recommendation}
-              </p>
+              {isEditing ? (
+                <Input
+                  value={editedValue}
+                  onChange={(e) => setEditedValue(e.target.value)}
+                  className="text-sm h-7 py-1"
+                  placeholder="Enter custom value..."
+                  autoFocus
+                />
+              ) : (
+                <p className="text-sm text-foreground font-medium break-words">
+                  {recommendation}
+                </p>
+              )}
             </div>
           </div>
 
           {/* Reasoning toggle */}
-          {reasoning && (
+          {reasoning && !isEditing && (
             <button
               onClick={() => setExpanded(!expanded)}
               className="flex items-center gap-1 text-[10px] text-muted-foreground hover:text-foreground transition-colors mb-2"
@@ -126,7 +149,7 @@ export const FieldCard = ({
             </button>
           )}
 
-          {expanded && reasoning && (
+          {expanded && reasoning && !isEditing && (
             <p className="text-xs text-muted-foreground bg-muted/30 rounded p-2 mb-2 animate-fade-in">
               {reasoning}
             </p>
@@ -139,9 +162,18 @@ export const FieldCard = ({
               size="xs"
               onClick={handleApply}
               className="flex-1"
+              disabled={isEditing && !editedValue.trim()}
             >
               <Check className="w-3 h-3" />
               Apply
+            </Button>
+            <Button
+              variant="outline"
+              size="xs"
+              onClick={handleEditToggle}
+              title={isEditing ? "Cancel edit" : "Edit manually"}
+            >
+              {isEditing ? <X className="w-3 h-3" /> : <Pencil className="w-3 h-3" />}
             </Button>
             <Button
               variant="outline"
