@@ -52,10 +52,11 @@ export const ExtensionPopup = () => {
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [pageContext, setPageContext] = useState("LeanIX IT Component");
   const [activeFieldId, setActiveFieldId] = useState<string | null>(null);
+  const [approvedComponentName, setApprovedComponentName] = useState<string | null>(null);
 
   // Generate recommendation for a single field
   const generateSingleFieldRecommendation = useCallback(async (field: FieldData) => {
-    console.log('[ExtensionPopup] Generating recommendation for field:', field.fieldName);
+    console.log('[ExtensionPopup] Generating recommendation for field:', field.fieldName, 'with component:', approvedComponentName);
     
     // Set this field to loading
     setRecommendations(prev => 
@@ -63,7 +64,8 @@ export const ExtensionPopup = () => {
     );
 
     try {
-      const results = await generateRecommendations([field], pageContext);
+      // Pass the approved component name to anchor the search
+      const results = await generateRecommendations([field], pageContext, approvedComponentName || undefined);
       const rec = results.find(r => r.fieldId === field.fieldId);
       
       setRecommendations(prev => 
@@ -89,7 +91,7 @@ export const ExtensionPopup = () => {
       );
       toast.error(`Failed to get recommendation for ${field.fieldName}`);
     }
-  }, [pageContext]);
+  }, [pageContext, approvedComponentName]);
 
   // Handle active field change from content script - fetch recommendation for that field only
   const handleActiveFieldChange = useCallback((field: FieldData) => {
@@ -178,6 +180,11 @@ export const ExtensionPopup = () => {
               console.error('Error getting page data:', chrome.runtime.lastError);
               // Use mock data as fallback - no auto-fetch
               setRecommendations(MOCK_FIELDS.map(f => ({ ...f, isLoading: false })));
+              // Set approved name from mock if available
+              const nameField = MOCK_FIELDS.find(f => f.fieldName.toLowerCase() === 'name');
+              if (nameField?.currentValue) {
+                setApprovedComponentName(nameField.currentValue);
+              }
               return;
             }
             
@@ -185,9 +192,19 @@ export const ExtensionPopup = () => {
               setPageContext(response.pageContext || "LeanIX IT Component");
               // Just load fields without recommendations - they'll be fetched on click
               setRecommendations(response.fields.map((f: FieldData) => ({ ...f, isLoading: false })));
+              // Initialize approved component name from the Name field's current value
+              const nameField = response.fields.find((f: FieldData) => f.fieldName?.toLowerCase() === 'name');
+              if (nameField?.currentValue) {
+                console.log('[ExtensionPopup] Initializing approved component name:', nameField.currentValue);
+                setApprovedComponentName(nameField.currentValue);
+              }
             } else {
               // No fields found, use mock data
               setRecommendations(MOCK_FIELDS.map(f => ({ ...f, isLoading: false })));
+              const nameField = MOCK_FIELDS.find(f => f.fieldName.toLowerCase() === 'name');
+              if (nameField?.currentValue) {
+                setApprovedComponentName(nameField.currentValue);
+              }
             }
           });
         }
@@ -198,6 +215,10 @@ export const ExtensionPopup = () => {
     } else {
       // Not running as extension, use mock data - no auto-fetch
       setRecommendations(MOCK_FIELDS.map(f => ({ ...f, isLoading: false })));
+      const nameField = MOCK_FIELDS.find(f => f.fieldName.toLowerCase() === 'name');
+      if (nameField?.currentValue) {
+        setApprovedComponentName(nameField.currentValue);
+      }
     }
   };
 
@@ -215,7 +236,8 @@ export const ExtensionPopup = () => {
         currentValue: r.currentValue,
       }));
 
-      const results = await generateRecommendations(fieldsToAnalyze, pageContext);
+      // Pass the approved component name to anchor all searches
+      const results = await generateRecommendations(fieldsToAnalyze, pageContext, approvedComponentName || undefined);
 
       // Map results back to our format
       const updatedRecommendations: FieldRecommendation[] = recommendations.map(field => {
@@ -244,6 +266,13 @@ export const ExtensionPopup = () => {
 
   const handleApply = async (fieldId: string, value: string) => {
     console.log('Applying recommendation:', fieldId, value);
+    
+    // Check if this is the Name field being applied - use it as the approved component name
+    const field = recommendations.find(r => r.fieldId === fieldId);
+    if (field?.fieldName?.toLowerCase() === 'name' && value) {
+      console.log('[ExtensionPopup] Setting approved component name:', value);
+      setApprovedComponentName(value);
+    }
     
     if (isExtension) {
       try {

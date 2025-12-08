@@ -166,9 +166,10 @@ serve(async (req) => {
       );
     }
 
-    const { fields, pageContext } = await req.json();
+    const { fields, pageContext, componentName: passedComponentName } = await req.json();
     console.log('Received fields:', fields);
     console.log('Page context:', pageContext);
+    console.log('Passed component name:', passedComponentName);
 
     if (!fields || !Array.isArray(fields)) {
       return new Response(
@@ -177,9 +178,10 @@ serve(async (req) => {
       );
     }
 
-    // Extract the main component name from fields to anchor all recommendations
+    // Use passed component name (approved earlier), or fall back to extracting from fields
     const nameField = fields.find((f: FieldData) => f.fieldName?.toLowerCase() === 'name');
-    const componentName = nameField?.currentValue || null;
+    const componentName = passedComponentName || nameField?.currentValue || null;
+    console.log('Using component name for search:', componentName);
 
     // For each field, search for specific info using Perplexity
     let searchResults: Record<string, PerplexitySearchResult | null> = {};
