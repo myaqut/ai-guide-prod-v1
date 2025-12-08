@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback } from "react";
 import { Header } from "./Header";
 import { SettingsPanel } from "./SettingsPanel";
 import { RecommendationList, FieldRecommendation } from "./RecommendationList";
-import { generateRecommendations, FieldData } from "@/lib/api";
+import { generateRecommendations, FieldData, GenerateRecommendationsResult } from "@/lib/api";
 import { toast } from "sonner";
 
 // Declare chrome as a global for TypeScript
@@ -49,10 +49,12 @@ export const ExtensionPopup = () => {
   const [activeFieldId, setActiveFieldId] = useState<string | null>(null);
   const [approvedComponentName, setApprovedComponentName] = useState<string | null>(null);
   const [nameFieldStatus, setNameFieldStatus] = useState<'pending' | 'valid' | 'invalid'>('pending');
+  const [urlCache, setUrlCache] = useState<Record<string, string[]>>({});
 
   // Generate recommendation for a single field
   const generateSingleFieldRecommendation = useCallback(async (field: FieldData) => {
     console.log('[ExtensionPopup] Generating recommendation for field:', field.fieldName, 'with component:', approvedComponentName);
+    console.log('[ExtensionPopup] Current URL cache:', urlCache);
     
     // Set this field to loading
     setRecommendations(prev => 
@@ -60,9 +62,15 @@ export const ExtensionPopup = () => {
     );
 
     try {
-      // Pass the approved component name to anchor the search
-      const results = await generateRecommendations([field], pageContext, approvedComponentName || undefined);
-      const rec = results.find(r => r.fieldId === field.fieldId);
+      // Pass the approved component name and cached URLs to anchor the search
+      const result = await generateRecommendations([field], pageContext, approvedComponentName || undefined, urlCache);
+      const rec = result.recommendations.find(r => r.fieldId === field.fieldId);
+      
+      // Update URL cache if new URLs were returned
+      if (result.cachedUrls) {
+        setUrlCache(prev => ({ ...prev, ...result.cachedUrls }));
+        console.log('[ExtensionPopup] Updated URL cache:', result.cachedUrls);
+      }
       
       setRecommendations(prev => 
         prev.map(r => r.fieldId === field.fieldId 
@@ -87,7 +95,7 @@ export const ExtensionPopup = () => {
       );
       toast.error(`Failed to get recommendation for ${field.fieldName}`);
     }
-  }, [pageContext, approvedComponentName]);
+  }, [pageContext, approvedComponentName, urlCache]);
 
   // Handle active field change from content script - fetch recommendation for that field only
   const handleActiveFieldChange = useCallback((field: FieldData) => {
@@ -259,12 +267,17 @@ export const ExtensionPopup = () => {
         currentValue: r.currentValue,
       }));
 
-      // Pass the approved component name to anchor all searches
-      const results = await generateRecommendations(fieldsToAnalyze, pageContext, approvedComponentName || undefined);
+      // Pass the approved component name and cached URLs to anchor all searches
+      const result = await generateRecommendations(fieldsToAnalyze, pageContext, approvedComponentName || undefined, urlCache);
+
+      // Update URL cache if new URLs were returned
+      if (result.cachedUrls) {
+        setUrlCache(prev => ({ ...prev, ...result.cachedUrls }));
+      }
 
       // Map results back to our format
       const updatedRecommendations: FieldRecommendation[] = recommendations.map(field => {
-        const rec = results.find(r => r.fieldId === field.fieldId);
+        const rec = result.recommendations.find(r => r.fieldId === field.fieldId);
         return {
           fieldId: field.fieldId,
           fieldName: field.fieldName,
@@ -377,6 +390,7 @@ export const ExtensionPopup = () => {
     setApprovedComponentName(null);
     setActiveFieldId(null);
     setNameFieldStatus('pending');
+    setUrlCache({}); // Clear URL cache when starting over
     // Reload name field from page
     loadNameField();
     toast.success("Starting over - Name field reloaded");

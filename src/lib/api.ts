@@ -15,13 +15,19 @@ export interface Recommendation {
   reasoning: string;
 }
 
+export interface GenerateRecommendationsResult {
+  recommendations: Recommendation[];
+  cachedUrls?: Record<string, string[]>;
+}
+
 export async function generateRecommendations(
   fields: FieldData[],
   pageContext?: string,
-  componentName?: string
-): Promise<Recommendation[]> {
+  componentName?: string,
+  cachedUrls?: Record<string, string[]>
+): Promise<GenerateRecommendationsResult> {
   const { data, error } = await supabase.functions.invoke('generate-recommendations', {
-    body: { fields, pageContext, componentName },
+    body: { fields, pageContext, componentName, cachedUrls },
   });
 
   if (error) {
@@ -34,5 +40,8 @@ export async function generateRecommendations(
     throw new Error(data.error);
   }
 
-  return data.recommendations;
+  return {
+    recommendations: data.recommendations,
+    cachedUrls: data.cachedUrls
+  };
 }
