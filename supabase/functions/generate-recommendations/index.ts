@@ -41,23 +41,27 @@ function isLifecycleField(fieldName: string): boolean {
 
 // Check if this is a URL field that should use cached URL from date search
 function isUrlFieldForCachedDate(fieldName: string): string | null {
-  // Normalize: remove parentheses and extra spaces
-  const lowerFieldName = fieldName.toLowerCase().replace(/[()]/g, '').replace(/\s+/g, ' ');
+  // Normalize: remove parentheses, underscores, and extra spaces
+  const lowerFieldName = fieldName.toLowerCase().replace(/[()_-]/g, ' ').replace(/\s+/g, ' ');
+  const fieldId = fieldName.toLowerCase(); // Keep original for ID matching
   
-  // Active Date URL / Active URL should use Active Date's URL (the URL where release date was found)
-  if (lowerFieldName.includes('url') && lowerFieldName.includes('active') && !lowerFieldName.includes('end')) {
+  // Active Date URL / Active URL should use Active Date's URL
+  if ((lowerFieldName.includes('url') && lowerFieldName.includes('active') && !lowerFieldName.includes('end')) ||
+      fieldId.includes('activedateurl')) {
     return 'active_date';
   }
   // End of Sale URL should use End of Sale Date's URL
-  if (lowerFieldName.includes('url') && (lowerFieldName.includes('end of sale') || lowerFieldName.includes('eos'))) {
+  if ((lowerFieldName.includes('url') && (lowerFieldName.includes('end of sale') || lowerFieldName.includes('eos'))) ||
+      fieldId.includes('endofsaleurl') || fieldId.includes('eosdateurl')) {
     return 'end_of_sale_date';
   }
-  // End of (Standard) Support URL / End Of Standard Support Date URL should use End of Standard Support Date's URL
-  if (lowerFieldName.includes('url') && (
+  // End of Life / End of (Standard) Support URL - matches "endOfLifeDateUrl"
+  if ((lowerFieldName.includes('url') && (
     lowerFieldName.includes('standard support') ||
     lowerFieldName.includes('end of support') || 
+    lowerFieldName.includes('end of life') ||
     lowerFieldName.includes('eol')
-  )) {
+  )) || fieldId.includes('endoflifedateurl') || fieldId.includes('endofsupporturl')) {
     return 'end_of_support_date';
   }
   
@@ -66,20 +70,23 @@ function isUrlFieldForCachedDate(fieldName: string): string | null {
 
 // Get the cache key for a date field
 function getDateFieldCacheKey(fieldName: string): string | null {
-  // Normalize: remove parentheses and extra spaces
-  const lowerFieldName = fieldName.toLowerCase().replace(/[()]/g, '').replace(/\s+/g, ' ');
+  // Normalize: remove parentheses, underscores, and extra spaces
+  const lowerFieldName = fieldName.toLowerCase().replace(/[()_-]/g, ' ').replace(/\s+/g, ' ');
+  const fieldId = fieldName.toLowerCase(); // Keep original for ID matching
   
   // "Active" field (without URL) - stores release date URL
   if ((lowerFieldName === 'active' || lowerFieldName.includes('active date') || lowerFieldName.includes('active')) && 
       !lowerFieldName.includes('url') && !lowerFieldName.includes('end')) {
     return 'active_date';
   }
-  if ((lowerFieldName.includes('end of sale') || lowerFieldName.includes('eos')) && !lowerFieldName.includes('url')) {
+  if (((lowerFieldName.includes('end of sale') || lowerFieldName.includes('eos')) && !lowerFieldName.includes('url')) ||
+      (fieldId.includes('endofsale') && !fieldId.includes('url'))) {
     return 'end_of_sale_date';
   }
-  // End of (Standard) Support - handle parentheses in field name
-  if ((lowerFieldName.includes('standard support') || lowerFieldName.includes('end of support') || 
-       lowerFieldName.includes('end of life') || lowerFieldName.includes('eol')) && !lowerFieldName.includes('url')) {
+  // End of Life / End of (Standard) Support - matches "lifecyclePhasesEditComponent_endOfLife"
+  if (((lowerFieldName.includes('standard support') || lowerFieldName.includes('end of support') || 
+       lowerFieldName.includes('end of life') || lowerFieldName.includes('eol')) && !lowerFieldName.includes('url')) ||
+      (fieldId.includes('endoflife') && !fieldId.includes('url'))) {
     return 'end_of_support_date';
   }
   
