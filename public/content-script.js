@@ -325,22 +325,23 @@ function applyFieldValue(fieldId, value) {
       // Handle Tiptap/ProseMirror editors
       element.focus();
       
-      // Clear existing content
-      element.innerHTML = '';
+      // Select all existing content and delete it
+      const selection = window.getSelection();
+      const range = document.createRange();
+      range.selectNodeContents(element);
+      selection.removeAllRanges();
+      selection.addRange(range);
       
-      // For Tiptap, we need to insert content properly
-      // Try to find the Tiptap editor instance
-      const tiptapEditor = element.closest('.tiptap') || element.closest('.ProseMirror') || element;
+      // Use execCommand to insert text (works with Tiptap)
+      document.execCommand('insertHTML', false, `<p>${value}</p>`);
       
-      // Set the content
-      if (tiptapEditor.editor) {
-        // If Tiptap editor instance is accessible
-        tiptapEditor.editor.commands.setContent(value);
-      } else {
-        // Fallback: set innerHTML and dispatch events
-        element.innerHTML = `<p>${value}</p>`;
-        element.textContent = value;
-      }
+      // Also dispatch beforeinput for modern editors
+      element.dispatchEvent(new InputEvent('beforeinput', {
+        bubbles: true,
+        cancelable: true,
+        inputType: 'insertText',
+        data: value
+      }));
       
       // Dispatch input event for Tiptap
       element.dispatchEvent(new InputEvent('input', { 
