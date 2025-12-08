@@ -41,7 +41,8 @@ function isLifecycleField(fieldName: string): boolean {
 
 // Check if this is a URL field that should use cached URL from date search
 function isUrlFieldForCachedDate(fieldName: string): string | null {
-  const lowerFieldName = fieldName.toLowerCase();
+  // Normalize: remove parentheses and extra spaces
+  const lowerFieldName = fieldName.toLowerCase().replace(/[()]/g, '').replace(/\s+/g, ' ');
   
   // Active Date URL / Active URL should use Active Date's URL (the URL where release date was found)
   if (lowerFieldName.includes('url') && lowerFieldName.includes('active') && !lowerFieldName.includes('end')) {
@@ -51,11 +52,10 @@ function isUrlFieldForCachedDate(fieldName: string): string | null {
   if (lowerFieldName.includes('url') && (lowerFieldName.includes('end of sale') || lowerFieldName.includes('eos'))) {
     return 'end_of_sale_date';
   }
-  // End of Standard Support URL / End Of Standard Support Date URL should use End of Standard Support Date's URL
+  // End of (Standard) Support URL / End Of Standard Support Date URL should use End of Standard Support Date's URL
   if (lowerFieldName.includes('url') && (
-    lowerFieldName.includes('end of standard support') || 
-    lowerFieldName.includes('end of support') || 
     lowerFieldName.includes('standard support') ||
+    lowerFieldName.includes('end of support') || 
     lowerFieldName.includes('eol')
   )) {
     return 'end_of_support_date';
@@ -66,7 +66,8 @@ function isUrlFieldForCachedDate(fieldName: string): string | null {
 
 // Get the cache key for a date field
 function getDateFieldCacheKey(fieldName: string): string | null {
-  const lowerFieldName = fieldName.toLowerCase();
+  // Normalize: remove parentheses and extra spaces
+  const lowerFieldName = fieldName.toLowerCase().replace(/[()]/g, '').replace(/\s+/g, ' ');
   
   // "Active" field (without URL) - stores release date URL
   if ((lowerFieldName === 'active' || lowerFieldName.includes('active date') || lowerFieldName.includes('active')) && 
@@ -76,7 +77,8 @@ function getDateFieldCacheKey(fieldName: string): string | null {
   if ((lowerFieldName.includes('end of sale') || lowerFieldName.includes('eos')) && !lowerFieldName.includes('url')) {
     return 'end_of_sale_date';
   }
-  if ((lowerFieldName.includes('end of support') || lowerFieldName.includes('end of standard support') || 
+  // End of (Standard) Support - handle parentheses in field name
+  if ((lowerFieldName.includes('standard support') || lowerFieldName.includes('end of support') || 
        lowerFieldName.includes('end of life') || lowerFieldName.includes('eol')) && !lowerFieldName.includes('url')) {
     return 'end_of_support_date';
   }
