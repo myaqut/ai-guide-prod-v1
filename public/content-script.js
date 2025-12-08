@@ -29,36 +29,50 @@ function shouldIgnoreField(fieldName, fieldId) {
   );
 }
 
+// Check if element is an editable field (including Tiptap/ProseMirror)
+function isEditableElement(element) {
+  if (!element) return false;
+  return element.matches('input, textarea, select, [contenteditable="true"], .tiptap, .ProseMirror');
+}
+
+// Find the editable element from a target (handles Tiptap containers)
+function findEditableElement(element) {
+  if (!element) return null;
+  
+  // Direct match
+  if (isEditableElement(element)) {
+    return element;
+  }
+  
+  // Check for Tiptap/ProseMirror inside
+  const tiptap = element.querySelector('.tiptap, .ProseMirror, [contenteditable="true"]');
+  if (tiptap) return tiptap;
+  
+  // Check for regular inputs
+  const input = element.querySelector('input, textarea, select');
+  if (input) return input;
+  
+  // Check parent elements for field containers
+  const parentField = element.closest('[data-field-id], [data-field-name], .field-container, [class*="field"]');
+  if (parentField) {
+    const nestedTiptap = parentField.querySelector('.tiptap, .ProseMirror, [contenteditable="true"]');
+    if (nestedTiptap) return nestedTiptap;
+    
+    const nestedInput = parentField.querySelector('input, textarea, select');
+    if (nestedInput) return nestedInput;
+  }
+  
+  return null;
+}
+
 // Listen for focus events on input fields
 document.addEventListener('focusin', (event) => {
   const element = event.target;
+  const targetElement = findEditableElement(element);
   
-  // Check if clicked element or any parent is an input/form field
-  let targetElement = element;
-  
-  // If clicked element isn't directly an input, check if it's inside a field container
-  if (!element.matches('input, textarea, select, [contenteditable="true"]')) {
-    // Look for input inside the clicked element
-    const innerInput = element.querySelector('input, textarea, select, [contenteditable="true"]');
-    if (innerInput) {
-      targetElement = innerInput;
-    } else {
-      // Check parent elements for field containers
-      const parentField = element.closest('[data-field-id], [data-field-name], .field-container, [class*="field"]');
-      if (parentField) {
-        const innerInput = parentField.querySelector('input, textarea, select, [contenteditable="true"]');
-        if (innerInput) {
-          targetElement = innerInput;
-        }
-      }
-    }
-  }
-  
-  if (targetElement.matches('input, textarea, select, [contenteditable="true"]')) {
+  if (targetElement && isEditableElement(targetElement)) {
     const fieldData = extractFieldData(targetElement);
     if (fieldData && !shouldIgnoreField(fieldData.fieldName, fieldData.fieldId)) {
-      // Only notify if it's a different field
-      const isNewField = !activeField || activeField.fieldId !== fieldData.fieldId;
       activeField = fieldData;
       
       console.log('[LeanIX AI] Active field detected:', activeField.fieldName, activeField.fieldId);
@@ -137,6 +151,10 @@ function extractPageData() {
   
   // Common LeanIX field selectors - including provider
   const fieldSelectors = [
+    // Tiptap/ProseMirror editors (for description fields)
+    '.tiptap',
+    '.ProseMirror',
+    '[contenteditable="true"]',
     // Standard input fields
     'input[data-field-id]',
     'textarea[data-field-id]',
@@ -161,8 +179,6 @@ function extractPageData() {
     'input[name]',
     'textarea[name]',
     'select[name]',
-    // Contenteditable fields
-    '[contenteditable="true"]',
   ];
   
   fieldSelectors.forEach(selector => {
@@ -225,12 +241,36 @@ function extractFieldData(element, labelText = '') {
   // Skip hidden elements
   if (element.type === 'hidden') return null;
   
-  const fieldId = element.getAttribute('data-field-id') ||
-                  element.getAttribute('data-field-name') ||
-                  element.getAttribute('name') ||
-                  element.getAttribute('id') ||
-                  element.getAttribute('data-testid') ||
-                  '';
+  // Check for Tiptap/ProseMirror - look for fieldId on parent container
+  const isTiptap = element.matches('.tiptap, .ProseMirror') || element.getAttribute('contenteditable') === 'true';
+  
+  let fieldId = element.getAttribute('data-field-id') ||
+                element.getAttribute('data-field-name') ||
+                element.getAttribute('name') ||
+                element.getAttribute('id') ||
+                element.getAttribute('data-testid') ||
+                '';
+  
+  // For Tiptap editors, try to find fieldId from parent elements
+  if (!fieldId && isTiptap) {
+    const parent = element.closest('[data-field-id], [data-field-name], [class*="description" i], [class*="field"]');
+    if (parent) {
+      fieldId = parent.getAttribute('data-field-id') ||
+                parent.getAttribute('data-field-name') ||
+                parent.getAttribute('id') ||
+                '';
+      
+      // Check if parent class contains "description"
+      if (!fieldId && parent.className.toLowerCase().includes('description')) {
+        fieldId = 'description';
+      }
+    }
+    
+    // Fallback: assume it's the description field if it's a rich text editor
+    if (!fieldId) {
+      fieldId = 'description';
+    }
+  }
   
   if (!fieldId) return null;
   
@@ -240,6 +280,17 @@ function extractFieldData(element, labelText = '') {
   if (!fieldName) {
     const label = document.querySelector(`label[for="${element.id}"]`);
     if (label) fieldName = label.textContent?.trim() || '';
+  }
+  
+  if (!fieldName) {
+    // For Tiptap, look for nearby labels
+    if (isTiptap) {
+      const container = element.closest('[data-field-id], [data-field-name], .field-container, [class*="field"]');
+      if (container) {
+        const label = container.querySelector('label, .label, [class*="label"]');
+        if (label) fieldName = label.textContent?.trim() || '';
+      }
+    }
   }
   
   if (!fieldName) {
@@ -259,8 +310,9 @@ function extractFieldData(element, labelText = '') {
   if (element.tagName === 'SELECT') {
     const selectedOption = element.options?.[element.selectedIndex];
     currentValue = selectedOption ? selectedOption.text : '';
-  } else if (element.getAttribute('contenteditable') === 'true') {
-    currentValue = element.textContent || '';
+  } else if (isTiptap || element.getAttribute('contenteditable') === 'true') {
+    // For Tiptap, get text content
+    currentValue = element.textContent || element.innerText || '';
   } else {
     currentValue = element.value || '';
   }
@@ -268,7 +320,8 @@ function extractFieldData(element, labelText = '') {
   return {
     fieldId,
     fieldName,
-    currentValue: currentValue.trim()
+    currentValue: currentValue.trim(),
+    isTiptap: isTiptap
   };
 }
 
