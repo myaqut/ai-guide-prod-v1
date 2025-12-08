@@ -93,32 +93,43 @@ export const ExtensionPopup = () => {
 
   // Handle active field change from content script - fetch recommendation for that field only
   const handleActiveFieldChange = useCallback((field: FieldData) => {
-    console.log('[ExtensionPopup] Active field changed:', field);
+    console.log('[ExtensionPopup] Active field changed:', field.fieldName, field.fieldId);
+    
+    // Always update active field ID
     setActiveFieldId(field.fieldId);
     
-    // Check if field already exists in recommendations
-    const existingField = recommendations.find(r => r.fieldId === field.fieldId);
-    
-    if (existingField) {
-      // Move to top and update current value
-      setRecommendations(prev => {
-        const updated = prev.filter(r => r.fieldId !== field.fieldId);
-        return [{ ...existingField, currentValue: field.currentValue }, ...updated];
-      });
+    // Use functional update to get latest state
+    setRecommendations(prev => {
+      const existingIndex = prev.findIndex(r => r.fieldId === field.fieldId);
       
-      // Only auto-generate if no recommendation exists yet
-      if (!existingField.recommendation && !existingField.isLoading) {
-        generateSingleFieldRecommendation(field);
+      if (existingIndex >= 0) {
+        // Field exists - move to top and update current value
+        const existing = prev[existingIndex];
+        const updated = prev.filter(r => r.fieldId !== field.fieldId);
+        const updatedField = { ...existing, currentValue: field.currentValue };
+        
+        // Schedule recommendation generation if needed (outside of setState)
+        if (!existing.recommendation && !existing.isLoading) {
+          setTimeout(() => generateSingleFieldRecommendation(field), 0);
+        }
+        
+        return [updatedField, ...updated];
+      } else {
+        // New field - add at top with loading state
+        const newField: FieldRecommendation = { 
+          ...field, 
+          isLoading: true 
+        };
+        
+        // Schedule recommendation generation (outside of setState)
+        setTimeout(() => generateSingleFieldRecommendation(field), 0);
+        
+        return [newField, ...prev];
       }
-    } else {
-      // Add new field at the top and auto-generate
-      const newField = { ...field, isLoading: true };
-      setRecommendations(prev => [newField, ...prev]);
-      generateSingleFieldRecommendation(field);
-    }
+    });
     
     toast.info(`Field detected: ${field.fieldName}`, { duration: 2000 });
-  }, [recommendations, generateSingleFieldRecommendation]);
+  }, [generateSingleFieldRecommendation]);
 
   // Handle refresh for a single field
   const handleRefreshField = useCallback((fieldId: string) => {

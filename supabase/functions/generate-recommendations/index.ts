@@ -25,15 +25,8 @@ interface RecommendationResponse {
 }
 
 interface PerplexitySearchResult {
-  dates: {
-    activeDate?: string;
-    endOfSaleDate?: string;
-    endOfSupportDate?: string;
-  };
-  urls: {
-    lifecycleUrl?: string;
-  };
-  sources: string[];
+  content: string;
+  urls: string[];
 }
 
 // Check if a field is a lifecycle-related field (date or URL)
@@ -43,32 +36,66 @@ function isLifecycleField(fieldName: string): boolean {
   return lifecycleKeywords.some(keyword => lowerName.includes(keyword));
 }
 
-// Check if the field is a URL field related to dates
-function isDateUrlField(fieldName: string): boolean {
-  const lowerName = fieldName.toLowerCase();
-  return lowerName.includes('url') && isLifecycleField(fieldName);
+// Build a search query based on field type
+function buildFieldSearchQuery(componentName: string, fieldName: string): string {
+  const lowerFieldName = fieldName.toLowerCase();
+  
+  // Date-related fields
+  if (lowerFieldName.includes('active date') || lowerFieldName.includes('release')) {
+    return `"${componentName}" official release date version announcement from vendor YYYY-MM-DD`;
+  }
+  if (lowerFieldName.includes('end of sale') || lowerFieldName.includes('eos')) {
+    return `"${componentName}" end of sale date official announcement YYYY-MM-DD`;
+  }
+  if (lowerFieldName.includes('end of support') || lowerFieldName.includes('end of life') || lowerFieldName.includes('eol')) {
+    return `"${componentName}" end of life end of support date official YYYY-MM-DD`;
+  }
+  
+  // URL fields - search for the corresponding date source
+  if (lowerFieldName.includes('url') && lowerFieldName.includes('active')) {
+    return `"${componentName}" release announcement official page lifecycle URL`;
+  }
+  if (lowerFieldName.includes('url') && (lowerFieldName.includes('end of sale') || lowerFieldName.includes('eos'))) {
+    return `"${componentName}" end of sale announcement official page URL`;
+  }
+  if (lowerFieldName.includes('url') && (lowerFieldName.includes('end of support') || lowerFieldName.includes('eol'))) {
+    return `"${componentName}" lifecycle support policy official page URL`;
+  }
+  
+  // Description field
+  if (lowerFieldName.includes('description')) {
+    return `"${componentName}" product description features overview what is`;
+  }
+  
+  // Provider/Vendor field
+  if (lowerFieldName.includes('provider') || lowerFieldName.includes('vendor')) {
+    return `"${componentName}" vendor company manufacturer who makes`;
+  }
+  
+  // Category field
+  if (lowerFieldName.includes('category') || lowerFieldName.includes('type')) {
+    return `"${componentName}" software type category classification what kind of software`;
+  }
+  
+  // Lifecycle status
+  if (lowerFieldName.includes('lifecycle') || lowerFieldName.includes('status')) {
+    return `"${componentName}" lifecycle status current support active or end of life`;
+  }
+  
+  // Default query for lifecycle info
+  return `"${componentName}" official product lifecycle dates release end of support`;
 }
 
-// Search for lifecycle information using Perplexity API
-async function searchLifecycleInfo(componentName: string): Promise<PerplexitySearchResult | null> {
+// Search for field-specific information using Perplexity API
+async function searchFieldInfo(componentName: string, fieldName: string): Promise<PerplexitySearchResult | null> {
   if (!PERPLEXITY_API_KEY) {
     console.log('Perplexity API key not configured, skipping web search');
     return null;
   }
 
   try {
-    console.log(`Searching lifecycle info for: ${componentName}`);
-    
-    const searchQuery = `What are the official lifecycle dates for "${componentName}"? 
-    I need:
-    1. Release date / Active date (when it was released)
-    2. End of Sale date (when it stops being sold)
-    3. End of Standard Support date / End of Life date
-    
-    Please provide:
-    - Exact dates in YYYY-MM-DD format
-    - The official source URL where these dates are documented
-    - Only use official vendor documentation, not third-party sources`;
+    const searchQuery = buildFieldSearchQuery(componentName, fieldName);
+    console.log(`Searching for ${fieldName}: ${searchQuery}`);
 
     const response = await fetch('https://api.perplexity.ai/chat/completions', {
       method: 'POST',
@@ -81,10 +108,10 @@ async function searchLifecycleInfo(componentName: string): Promise<PerplexitySea
         messages: [
           {
             role: 'system',
-            content: `You are a lifecycle research assistant. Search for official product lifecycle information only from vendor sources. 
-            Always provide dates in YYYY-MM-DD format when available.
+            content: `You are a product research assistant. Search for official information only from vendor sources. 
+            For dates, always provide in YYYY-MM-DD format when available.
             Always cite the exact URL where the information was found.
-            If you cannot find official dates, say so clearly.
+            If you cannot find official information, say so clearly.
             Focus ONLY on the exact product asked about, not similar products.`
           },
           {
@@ -94,7 +121,7 @@ async function searchLifecycleInfo(componentName: string): Promise<PerplexitySea
         ],
         temperature: 0.1,
         top_p: 0.9,
-        max_tokens: 2000,
+        max_tokens: 1500,
         return_images: false,
         return_related_questions: false,
         search_recency_filter: 'year',
@@ -108,65 +135,18 @@ async function searchLifecycleInfo(componentName: string): Promise<PerplexitySea
     }
 
     const data = await response.json();
-    const content = data.choices?.[0]?.message?.content;
+    const content = data.choices?.[0]?.message?.content || '';
     const citations = data.citations || [];
     
-    console.log('Perplexity response:', content);
+    console.log(`Perplexity response for ${fieldName}:`, content.substring(0, 300));
     console.log('Citations:', citations);
 
-    // Parse the response to extract dates and URLs
-    const result: PerplexitySearchResult = {
-      dates: {},
-      urls: {},
-      sources: citations
+    return {
+      content,
+      urls: citations
     };
-
-    // Extract dates from the response using regex patterns
-    const datePattern = /(\d{4}-\d{2}-\d{2})/g;
-    const dates = content.match(datePattern) || [];
-    
-    // Try to associate dates with their meaning from context
-    const lowerContent = content.toLowerCase();
-    
-    // Look for release/active date
-    if (lowerContent.includes('release') || lowerContent.includes('active') || lowerContent.includes('launched') || lowerContent.includes('available')) {
-      const releaseMatch = content.match(/(?:release|active|launched|available|ga).*?(\d{4}-\d{2}-\d{2})/i);
-      if (releaseMatch) {
-        result.dates.activeDate = releaseMatch[1];
-      }
-    }
-    
-    // Look for end of sale date
-    if (lowerContent.includes('end of sale') || lowerContent.includes('discontinued') || lowerContent.includes('end-of-sale')) {
-      const eosMatch = content.match(/(?:end.?of.?sale|discontinued).*?(\d{4}-\d{2}-\d{2})/i);
-      if (eosMatch) {
-        result.dates.endOfSaleDate = eosMatch[1];
-      }
-    }
-    
-    // Look for end of support date
-    if (lowerContent.includes('end of support') || lowerContent.includes('end of life') || lowerContent.includes('eol') || lowerContent.includes('eos')) {
-      const eolMatch = content.match(/(?:end.?of.?(?:support|life)|eol|eos).*?(\d{4}-\d{2}-\d{2})/i);
-      if (eolMatch) {
-        result.dates.endOfSupportDate = eolMatch[1];
-      }
-    }
-
-    // Extract lifecycle URL from citations or content
-    const urlPattern = /https?:\/\/[^\s\)\"]+(?:lifecycle|support|policy|eol|end-of-life)[^\s\)\"]*/gi;
-    const foundUrls = content.match(urlPattern) || [];
-    if (foundUrls.length > 0) {
-      result.urls.lifecycleUrl = foundUrls[0];
-    } else if (citations.length > 0) {
-      result.urls.lifecycleUrl = citations[0];
-    }
-
-    // Store the raw content for the AI to use
-    (result as any).rawContent = content;
-
-    return result;
   } catch (error) {
-    console.error('Error searching lifecycle info:', error);
+    console.error('Error searching field info:', error);
     return null;
   }
 }
@@ -201,33 +181,41 @@ serve(async (req) => {
     const nameField = fields.find((f: FieldData) => f.fieldName?.toLowerCase() === 'name');
     const componentName = nameField?.currentValue || null;
 
-    // Check if any lifecycle fields are being requested
-    const hasLifecycleFields = fields.some((f: FieldData) => isLifecycleField(f.fieldName));
+    // For each field, search for specific info using Perplexity
+    let searchResults: Record<string, PerplexitySearchResult | null> = {};
     
-    // Search for lifecycle info using Perplexity if we have a component name and lifecycle fields
-    let lifecycleInfo: PerplexitySearchResult | null = null;
-    if (componentName && hasLifecycleFields) {
-      console.log('Searching for lifecycle information via Perplexity...');
-      lifecycleInfo = await searchLifecycleInfo(componentName);
-      console.log('Lifecycle search result:', lifecycleInfo);
+    if (componentName) {
+      // Search for each field that needs web search
+      for (const field of fields) {
+        const needsSearch = isLifecycleField(field.fieldName) || 
+                           field.fieldName.toLowerCase().includes('description') ||
+                           field.fieldName.toLowerCase().includes('provider') ||
+                           field.fieldName.toLowerCase().includes('category');
+        
+        if (needsSearch) {
+          console.log(`Searching info for field: ${field.fieldName}`);
+          const result = await searchFieldInfo(componentName, field.fieldName);
+          searchResults[field.fieldId] = result;
+        }
+      }
     }
 
-    // Build lifecycle context for the AI
-    let lifecycleContext = '';
-    if (lifecycleInfo) {
-      lifecycleContext = `
-PERPLEXITY WEB SEARCH RESULTS FOR "${componentName}":
-${(lifecycleInfo as any).rawContent || 'No detailed content available'}
+    // Build context from all search results
+    let searchContext = '';
+    if (Object.keys(searchResults).length > 0) {
+      searchContext = `
+WEB SEARCH RESULTS FOR "${componentName}":
+${Object.entries(searchResults).map(([fieldId, result]) => {
+  if (!result) return '';
+  const field = fields.find((f: FieldData) => f.fieldId === fieldId);
+  return `
+--- Results for ${field?.fieldName || fieldId} ---
+${result.content}
+Sources: ${result.urls.join(', ')}
+`;
+}).filter(Boolean).join('\n')}
 
-Extracted dates:
-- Active/Release Date: ${lifecycleInfo.dates.activeDate || 'Not found'}
-- End of Sale Date: ${lifecycleInfo.dates.endOfSaleDate || 'Not found'}
-- End of Support Date: ${lifecycleInfo.dates.endOfSupportDate || 'Not found'}
-
-Official Lifecycle URL: ${lifecycleInfo.urls.lifecycleUrl || 'Not found'}
-Source URLs: ${lifecycleInfo.sources.join(', ') || 'None'}
-
-USE THESE SEARCH RESULTS as your primary source for lifecycle dates and URLs. Include the source URL in your reasoning.
+USE THESE SEARCH RESULTS as your primary source. Include the source URL in your reasoning for dates.
 `;
     }
 
@@ -248,41 +236,39 @@ Examples:
 - "Microsoft SQL Server 2022 Standard"
 - "Apache Kafka 3.5"
 
-${lifecycleContext}
+${searchContext}
 
-LIFECYCLE DATE FIELDS (Active Date, New End of Sale Date, End of Standard Support, etc.):
-- USE THE PERPLEXITY SEARCH RESULTS ABOVE if available
+FIELD-SPECIFIC GUIDELINES:
+
+FOR DATE FIELDS (Active Date, End of Sale Date, End of Standard Support, etc.):
 - Provide the date in YYYY-MM-DD format
 - In the reasoning, ALWAYS include the official source URL where this date was found
-- Example reasoning: "End of Standard Support is 2025-10-14 per official lifecycle policy. Source: https://www.vendor.com/lifecycle"
-- If the search results don't contain the exact date, set confidence to 0.5 and explain
+- If search results contain the date, use it with high confidence (0.9+)
+- If no date found, set confidence to 0.5 and explain
 
-CRITICAL - DATE AND URL FIELD CONSISTENCY:
-- When providing "Active Date" and "Active Date URL", they MUST reference the SAME source
-- The "Active Date URL" should be the direct link to where the "Active Date" was found
-- Same for "End of Sale Date" + "End of Sale Date URL", "End of Standard Support" + "End of Standard Support URL"
-- Example: If Active Date is 2023-08-15 from https://vendor.com/lifecycle, then Active Date URL MUST be https://vendor.com/lifecycle
+FOR URL FIELDS (Active Date URL, End of Sale Date URL, etc.):
+- The URL MUST point to the EXACT same source as the corresponding date field
+- Use the lifecycle URL from search results if available
+- Recommend direct URL to the lifecycle/support page
 
-LIFECYCLE URL FIELDS (Active Date URL, New End of Sale Date URL, End of Standard Support URL, etc.):
-- The URL field MUST point to the EXACT same source as the corresponding date field
-- USE THE LIFECYCLE URL FROM PERPLEXITY SEARCH RESULTS if available
-- The recommendation should be the direct URL to the lifecycle/support page
-- Common official sources:
-  - MongoDB: https://www.mongodb.com/support-policy/lifecycles
-  - Microsoft: https://learn.microsoft.com/en-us/lifecycle/products/
-  - Oracle: https://www.oracle.com/support/lifetime-support/
-  - Red Hat: https://access.redhat.com/support/policy/updates/
-  - VMware: https://lifecycle.vmware.com/
+FOR DESCRIPTION FIELDS:
+- Use the search results to write a concise, accurate description
+- Include key features and purpose of the component
 
-For other fields, provide appropriate professional values based on the context.
+FOR PROVIDER/VENDOR FIELDS:
+- Extract the vendor name from search results
+- Use official company name (e.g., "MongoDB, Inc." not just "Mongo")
+
+FOR CATEGORY FIELDS:
+- Determine the software category (Database, Application Server, Framework, etc.)
 
 Respond with a JSON array of recommendations. Each recommendation must have:
 - fieldId: the original field ID
 - fieldName: the original field name  
 - currentValue: the current value (if any)
 - recommendation: your suggested value
-- confidence: a number between 0 and 1 indicating confidence (use 0.9+ if from Perplexity search, 0.5 if uncertain)
-- reasoning: brief explanation (1-2 sentences). For date fields, ALWAYS include the source URL. For URL fields, confirm it matches the date source.`;
+- confidence: a number between 0 and 1 (use 0.9+ if from search, 0.5 if uncertain)
+- reasoning: brief explanation (1-2 sentences). For date fields, ALWAYS include the source URL.`;
 
     const userPrompt = `Given the following catalog fields from an IT Component page, provide recommendations:
 
@@ -291,7 +277,7 @@ ${componentName ? `\nIMPORTANT: This is for the component "${componentName}" - A
 Fields to analyze:
 ${fields.map((f: FieldData) => `- ${f.fieldName} (ID: ${f.fieldId})${f.currentValue ? `: current value "${f.currentValue}"` : ': empty'}`).join('\n')}
 
-${lifecycleInfo ? 'Use the Perplexity search results provided in the system prompt for lifecycle dates and URLs.' : ''}
+${Object.keys(searchResults).length > 0 ? 'Use the Perplexity search results provided in the system prompt for accurate information.' : ''}
 
 Provide recommendations following the naming convention for the Name field and appropriate professional values for other fields. Return ONLY a valid JSON array.`;
 
