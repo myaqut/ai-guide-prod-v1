@@ -178,46 +178,58 @@ export const ExtensionPopup = () => {
           chrome.tabs.sendMessage(tab.id, { action: 'getPageData' }, (response) => {
             if (chrome.runtime.lastError) {
               console.error('Error getting page data:', chrome.runtime.lastError);
-              // Use mock data as fallback - no auto-fetch
-              setRecommendations(MOCK_FIELDS.map(f => ({ ...f, isLoading: false })));
-              // Set approved name from mock if available
+              // Start with just the Name field from mock
               const nameField = MOCK_FIELDS.find(f => f.fieldName.toLowerCase() === 'name');
-              if (nameField?.currentValue) {
-                setApprovedComponentName(nameField.currentValue);
+              if (nameField) {
+                setRecommendations([{ ...nameField, isLoading: false }]);
+                if (nameField.currentValue) {
+                  setApprovedComponentName(nameField.currentValue);
+                }
               }
               return;
             }
             
             if (response && response.fields && response.fields.length > 0) {
               setPageContext(response.pageContext || "LeanIX IT Component");
-              // Just load fields without recommendations - they'll be fetched on click
-              setRecommendations(response.fields.map((f: FieldData) => ({ ...f, isLoading: false })));
-              // Initialize approved component name from the Name field's current value
+              // Only start with the Name field - other fields will be added as they become active
               const nameField = response.fields.find((f: FieldData) => f.fieldName?.toLowerCase() === 'name');
-              if (nameField?.currentValue) {
-                console.log('[ExtensionPopup] Initializing approved component name:', nameField.currentValue);
-                setApprovedComponentName(nameField.currentValue);
+              if (nameField) {
+                setRecommendations([{ ...nameField, isLoading: false }]);
+                if (nameField.currentValue) {
+                  console.log('[ExtensionPopup] Initializing approved component name:', nameField.currentValue);
+                  setApprovedComponentName(nameField.currentValue);
+                }
+              } else {
+                // No name field found, start empty
+                setRecommendations([]);
               }
             } else {
-              // No fields found, use mock data
-              setRecommendations(MOCK_FIELDS.map(f => ({ ...f, isLoading: false })));
+              // No fields found, use mock Name field
               const nameField = MOCK_FIELDS.find(f => f.fieldName.toLowerCase() === 'name');
-              if (nameField?.currentValue) {
-                setApprovedComponentName(nameField.currentValue);
+              if (nameField) {
+                setRecommendations([{ ...nameField, isLoading: false }]);
+                if (nameField.currentValue) {
+                  setApprovedComponentName(nameField.currentValue);
+                }
               }
             }
           });
         }
       } catch (error) {
         console.error('Error loading page fields:', error);
-        setRecommendations(MOCK_FIELDS.map(f => ({ ...f, isLoading: false })));
+        const nameField = MOCK_FIELDS.find(f => f.fieldName.toLowerCase() === 'name');
+        if (nameField) {
+          setRecommendations([{ ...nameField, isLoading: false }]);
+        }
       }
     } else {
-      // Not running as extension, use mock data - no auto-fetch
-      setRecommendations(MOCK_FIELDS.map(f => ({ ...f, isLoading: false })));
+      // Not running as extension, start with just the Name field from mock
       const nameField = MOCK_FIELDS.find(f => f.fieldName.toLowerCase() === 'name');
-      if (nameField?.currentValue) {
-        setApprovedComponentName(nameField.currentValue);
+      if (nameField) {
+        setRecommendations([{ ...nameField, isLoading: false }]);
+        if (nameField.currentValue) {
+          setApprovedComponentName(nameField.currentValue);
+        }
       }
     }
   };
