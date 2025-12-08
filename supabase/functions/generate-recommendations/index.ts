@@ -43,7 +43,7 @@ function isLifecycleField(fieldName: string): boolean {
 function isUrlFieldForCachedDate(fieldName: string): string | null {
   const lowerFieldName = fieldName.toLowerCase();
   
-  // Active URL should use Active Date's URL
+  // Active Date URL / Active URL should use Active Date's URL (the URL where release date was found)
   if (lowerFieldName.includes('url') && lowerFieldName.includes('active') && !lowerFieldName.includes('end')) {
     return 'active_date';
   }
@@ -63,13 +63,16 @@ function isUrlFieldForCachedDate(fieldName: string): string | null {
 function getDateFieldCacheKey(fieldName: string): string | null {
   const lowerFieldName = fieldName.toLowerCase();
   
-  if (lowerFieldName.includes('active date') || (lowerFieldName.includes('active') && lowerFieldName.includes('date') && !lowerFieldName.includes('end'))) {
+  // "Active" field (without URL) - stores release date URL
+  if ((lowerFieldName === 'active' || lowerFieldName.includes('active date') || lowerFieldName.includes('active')) && 
+      !lowerFieldName.includes('url') && !lowerFieldName.includes('end')) {
     return 'active_date';
   }
-  if (lowerFieldName.includes('end of sale') || lowerFieldName.includes('eos')) {
+  if ((lowerFieldName.includes('end of sale') || lowerFieldName.includes('eos')) && !lowerFieldName.includes('url')) {
     return 'end_of_sale_date';
   }
-  if (lowerFieldName.includes('end of support') || lowerFieldName.includes('end of standard support') || lowerFieldName.includes('end of life') || lowerFieldName.includes('eol')) {
+  if ((lowerFieldName.includes('end of support') || lowerFieldName.includes('end of standard support') || 
+       lowerFieldName.includes('end of life') || lowerFieldName.includes('eol')) && !lowerFieldName.includes('url')) {
     return 'end_of_support_date';
   }
   
@@ -80,9 +83,9 @@ function getDateFieldCacheKey(fieldName: string): string | null {
 function buildFieldSearchQuery(componentName: string, fieldName: string): string {
   const lowerFieldName = fieldName.toLowerCase();
   
-  // Date-related fields - emphasize official sources
-  if (lowerFieldName.includes('active date') || lowerFieldName.includes('release')) {
-    return `"${componentName}" official release date version announcement from official vendor website YYYY-MM-DD`;
+  // Active field - search for RELEASE DATE from official vendor
+  if (lowerFieldName === 'active' || lowerFieldName.includes('active date') || (lowerFieldName.includes('active') && !lowerFieldName.includes('url'))) {
+    return `"${componentName}" official release date initial release announcement from official vendor website YYYY-MM-DD`;
   }
   if (lowerFieldName.includes('end of sale') || lowerFieldName.includes('eos')) {
     return `"${componentName}" end of sale date official announcement from official vendor website YYYY-MM-DD`;
@@ -360,10 +363,11 @@ serve(async (req) => {
       );
     }
 
-    const { fields, pageContext, componentName: passedComponentName } = await req.json();
+    const { fields, pageContext, componentName: passedComponentName, cachedUrls: passedCachedUrls } = await req.json();
     console.log('Received fields:', fields);
     console.log('Page context:', pageContext);
     console.log('Passed component name:', passedComponentName);
+    console.log('Received cached URLs:', passedCachedUrls);
 
     if (!fields || !Array.isArray(fields)) {
       return new Response(
@@ -378,9 +382,18 @@ serve(async (req) => {
     console.log('Using component name for search:', componentName);
 
     // For each field, search for specific info using Perplexity
-    // Clear the URL cache for this request
+    // Clear and repopulate the URL cache from passed cached URLs
     for (const key in dateFieldUrlCache) {
       delete dateFieldUrlCache[key];
+    }
+    // Restore any cached URLs passed from the frontend
+    if (passedCachedUrls && typeof passedCachedUrls === 'object') {
+      for (const [key, urls] of Object.entries(passedCachedUrls)) {
+        if (Array.isArray(urls)) {
+          dateFieldUrlCache[key] = urls;
+          console.log(`Restored cached URLs for ${key}:`, urls);
+        }
+      }
     }
     
     let searchResults: Record<string, PerplexitySearchResult | null> = {};
@@ -595,8 +608,12 @@ Provide recommendations following the naming convention for the Name field and a
 
     console.log('Parsed recommendations:', recommendations);
 
+    // Return recommendations along with any newly cached URLs so frontend can store them
     return new Response(
-      JSON.stringify({ recommendations }),
+      JSON.stringify({ 
+        recommendations,
+        cachedUrls: dateFieldUrlCache  // Return cached URLs so frontend can pass them in future requests
+      }),
       { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     );
 
