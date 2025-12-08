@@ -16,34 +16,29 @@ const MOCK_FIELDS: FieldData[] = [
   {
     fieldId: "name",
     fieldName: "Name",
-    currentValue: "Mongo db 8.2",
-  },
-  {
-    fieldId: "provider",
-    fieldName: "Provider",
-    currentValue: "",
-  },
-  {
-    fieldId: "external_id",
-    fieldName: "External ID",
-    currentValue: "lx_ITC_660317",
-  },
-  {
-    fieldId: "description",
-    fieldName: "Description",
-    currentValue: "",
-  },
-  {
-    fieldId: "category",
-    fieldName: "Category",
-    currentValue: "",
-  },
-  {
-    fieldId: "lifecycle_status",
-    fieldName: "Lifecycle Status",
-    currentValue: "",
+    currentValue: "Google Angular 20.0",
   },
 ];
+
+// Check if name matches the expected format: Provider + Product + Version
+// Examples: "MongoDB Community Server 8.2", "Google Angular 20.0", "Microsoft SQL Server 2022"
+function isValidComponentNameFormat(name: string): boolean {
+  if (!name || name.trim().length < 3) return false;
+  
+  // Should have at least 2 parts (provider/product and version)
+  const parts = name.trim().split(/\s+/);
+  if (parts.length < 2) return false;
+  
+  // Check if last part looks like a version (contains number)
+  const lastPart = parts[parts.length - 1];
+  const hasVersion = /\d/.test(lastPart);
+  
+  // Check if first part looks like a provider name (capitalized)
+  const firstPart = parts[0];
+  const hasProvider = /^[A-Z]/.test(firstPart);
+  
+  return hasVersion && hasProvider;
+}
 
 export const ExtensionPopup = () => {
   const [showSettings, setShowSettings] = useState(false);
@@ -53,6 +48,7 @@ export const ExtensionPopup = () => {
   const [pageContext, setPageContext] = useState("LeanIX IT Component");
   const [activeFieldId, setActiveFieldId] = useState<string | null>(null);
   const [approvedComponentName, setApprovedComponentName] = useState<string | null>(null);
+  const [nameFieldStatus, setNameFieldStatus] = useState<'pending' | 'valid' | 'invalid'>('pending');
 
   // Generate recommendation for a single field
   const generateSingleFieldRecommendation = useCallback(async (field: FieldData) => {
@@ -162,75 +158,90 @@ export const ExtensionPopup = () => {
     };
   }, [handleActiveFieldChange]);
 
-  // Load fields from the page on mount - just load field list, don't fetch recommendations
+  // Load Name field from the page on mount - this is the entry point
   useEffect(() => {
-    loadPageFields();
+    loadNameField();
   }, []);
 
-  const loadPageFields = async () => {
+  const loadNameField = async () => {
     if (isExtension) {
       try {
         // Get the active tab
         const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
         
         if (tab?.id) {
-          // Send message to content script
-          chrome.tabs.sendMessage(tab.id, { action: 'getPageData' }, (response) => {
+          // Send message to content script to get specifically the Name field
+          chrome.tabs.sendMessage(tab.id, { action: 'getNameField' }, (response) => {
             if (chrome.runtime.lastError) {
-              console.error('Error getting page data:', chrome.runtime.lastError);
-              // Start with just the Name field from mock
-              const nameField = MOCK_FIELDS.find(f => f.fieldName.toLowerCase() === 'name');
-              if (nameField) {
-                setRecommendations([{ ...nameField, isLoading: false }]);
-                if (nameField.currentValue) {
-                  setApprovedComponentName(nameField.currentValue);
-                }
-              }
+              console.error('Error getting name field:', chrome.runtime.lastError);
+              initializeWithMockName();
               return;
             }
             
-            if (response && response.fields && response.fields.length > 0) {
+            if (response && response.field) {
+              const nameField = response.field;
               setPageContext(response.pageContext || "LeanIX IT Component");
-              // Only start with the Name field - other fields will be added as they become active
-              const nameField = response.fields.find((f: FieldData) => f.fieldName?.toLowerCase() === 'name');
-              if (nameField) {
-                setRecommendations([{ ...nameField, isLoading: false }]);
-                if (nameField.currentValue) {
-                  console.log('[ExtensionPopup] Initializing approved component name:', nameField.currentValue);
-                  setApprovedComponentName(nameField.currentValue);
-                }
-              } else {
-                // No name field found, start empty
-                setRecommendations([]);
-              }
+              processNameField(nameField);
             } else {
-              // No fields found, use mock Name field
-              const nameField = MOCK_FIELDS.find(f => f.fieldName.toLowerCase() === 'name');
-              if (nameField) {
-                setRecommendations([{ ...nameField, isLoading: false }]);
-                if (nameField.currentValue) {
-                  setApprovedComponentName(nameField.currentValue);
-                }
-              }
+              initializeWithMockName();
             }
           });
         }
       } catch (error) {
-        console.error('Error loading page fields:', error);
-        const nameField = MOCK_FIELDS.find(f => f.fieldName.toLowerCase() === 'name');
-        if (nameField) {
-          setRecommendations([{ ...nameField, isLoading: false }]);
-        }
+        console.error('Error loading name field:', error);
+        initializeWithMockName();
       }
     } else {
-      // Not running as extension, start with just the Name field from mock
-      const nameField = MOCK_FIELDS.find(f => f.fieldName.toLowerCase() === 'name');
-      if (nameField) {
-        setRecommendations([{ ...nameField, isLoading: false }]);
-        if (nameField.currentValue) {
-          setApprovedComponentName(nameField.currentValue);
-        }
-      }
+      // Not running as extension, use mock
+      initializeWithMockName();
+    }
+  };
+
+  const initializeWithMockName = () => {
+    const nameField = MOCK_FIELDS.find(f => f.fieldName.toLowerCase() === 'name');
+    if (nameField) {
+      processNameField(nameField);
+    }
+  };
+
+  const processNameField = (nameField: FieldData) => {
+    console.log('[ExtensionPopup] Processing Name field:', nameField);
+    
+    const currentName = nameField.currentValue || '';
+    const isValid = isValidComponentNameFormat(currentName);
+    
+    setNameFieldStatus(isValid ? 'valid' : (currentName ? 'invalid' : 'pending'));
+    
+    if (isValid) {
+      // Name is valid - auto-approve and use as anchor
+      console.log('[ExtensionPopup] Name format valid, auto-approving:', currentName);
+      setApprovedComponentName(currentName);
+      setRecommendations([{ 
+        ...nameField, 
+        recommendation: currentName,
+        confidence: 1,
+        reasoning: 'Name already matches the expected format: [Provider] + [Product] + [Version]',
+        isLoading: false 
+      }]);
+      toast.success(`Component identified: ${currentName}`);
+    } else if (currentName) {
+      // Name exists but doesn't match format - show for correction
+      console.log('[ExtensionPopup] Name format invalid, needs correction:', currentName);
+      setRecommendations([{ 
+        ...nameField, 
+        isLoading: true 
+      }]);
+      // Generate AI recommendation for proper name format
+      generateSingleFieldRecommendation(nameField);
+      toast.info('Name field needs formatting correction');
+    } else {
+      // No name - show empty field for input
+      console.log('[ExtensionPopup] No name found, waiting for input');
+      setRecommendations([{ 
+        ...nameField, 
+        isLoading: false 
+      }]);
+      toast.info('Please enter or focus the Name field to start');
     }
   };
 
@@ -279,11 +290,20 @@ export const ExtensionPopup = () => {
   const handleApply = async (fieldId: string, value: string) => {
     console.log('Applying recommendation:', fieldId, value);
     
-    // Check if this is the Name field being applied - use it as the approved component name
+    // Check if this is the Name field being applied
     const field = recommendations.find(r => r.fieldId === fieldId);
     if (field?.fieldName?.toLowerCase() === 'name' && value) {
-      console.log('[ExtensionPopup] Setting approved component name:', value);
-      setApprovedComponentName(value);
+      // Validate the name format
+      if (isValidComponentNameFormat(value)) {
+        console.log('[ExtensionPopup] Name format valid, setting approved component name:', value);
+        setApprovedComponentName(value);
+        setNameFieldStatus('valid');
+        toast.success(`Component name approved: ${value}`);
+      } else {
+        console.log('[ExtensionPopup] Name format invalid:', value);
+        setNameFieldStatus('invalid');
+        toast.warning('Name format should be: [Provider] + [Product] + [Version]');
+      }
     }
     
     if (isExtension) {
@@ -356,7 +376,10 @@ export const ExtensionPopup = () => {
     setRecommendations([]);
     setApprovedComponentName(null);
     setActiveFieldId(null);
-    toast.success("All fields cleared");
+    setNameFieldStatus('pending');
+    // Reload name field from page
+    loadNameField();
+    toast.success("Starting over - Name field reloaded");
   };
 
   return (

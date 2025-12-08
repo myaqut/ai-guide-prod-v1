@@ -128,6 +128,17 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
     const pageData = extractPageData();
     console.log('[LeanIX AI] Extracted page data:', pageData);
     sendResponse(pageData);
+  } else if (request.action === 'getNameField') {
+    // Specifically get the Name field - this is the entry point
+    const nameField = findNameField();
+    const pageTitle = document.querySelector('h1, .page-title, [data-testid="factsheet-title"]')?.textContent?.trim() || 
+                      document.title || 
+                      'LeanIX Page';
+    console.log('[LeanIX AI] Returning Name field:', nameField);
+    sendResponse({ 
+      field: nameField, 
+      pageContext: pageTitle 
+    });
   } else if (request.action === 'getActiveField') {
     console.log('[LeanIX AI] Returning active field:', activeField);
     sendResponse({ field: activeField });
@@ -139,6 +150,64 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
   
   return true; // Keep the message channel open for async response
 });
+
+// Find the Name field on the page
+function findNameField() {
+  // Try various selectors to find the Name field
+  const nameSelectors = [
+    '[data-field-id="name"]',
+    '[data-field-name="name"]',
+    '[name="name"]',
+    '#name',
+    'input[placeholder*="name" i]',
+    '[data-testid*="name"]',
+  ];
+  
+  for (const selector of nameSelectors) {
+    try {
+      const element = document.querySelector(selector);
+      if (element) {
+        const fieldData = extractFieldData(element);
+        if (fieldData && fieldData.fieldName.toLowerCase() === 'name') {
+          return fieldData;
+        }
+      }
+    } catch (e) {
+      // Continue to next selector
+    }
+  }
+  
+  // Also try to find by label
+  const labels = document.querySelectorAll('label');
+  for (const label of labels) {
+    const labelText = label.textContent?.trim().toLowerCase();
+    if (labelText === 'name' || labelText === 'component name') {
+      const forId = label.getAttribute('for');
+      if (forId) {
+        const input = document.getElementById(forId);
+        if (input) {
+          return extractFieldData(input, label.textContent);
+        }
+      }
+      // Check for nested input
+      const nestedInput = label.querySelector('input, textarea');
+      if (nestedInput) {
+        return extractFieldData(nestedInput, label.textContent);
+      }
+    }
+  }
+  
+  // Fallback: look for any input that seems like a name field
+  const allInputs = document.querySelectorAll('input[type="text"], input:not([type])');
+  for (const input of allInputs) {
+    const fieldData = extractFieldData(input);
+    if (fieldData && fieldData.fieldName.toLowerCase() === 'name') {
+      return fieldData;
+    }
+  }
+  
+  return null;
+}
 
 // Extract all form fields from the page
 function extractPageData() {
