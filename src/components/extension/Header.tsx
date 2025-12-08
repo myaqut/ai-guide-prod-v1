@@ -1,12 +1,13 @@
-import { Sparkles, Settings, Zap } from "lucide-react";
+import { Sparkles, Settings, Zap, RotateCcw } from "lucide-react";
 import { Button } from "@/components/ui/button";
 
 interface HeaderProps {
   onSettingsClick: () => void;
+  onStartOver: () => void;
   isConnected: boolean;
 }
 
-export const Header = ({ onSettingsClick, isConnected }: HeaderProps) => {
+export const Header = ({ onSettingsClick, onStartOver, isConnected }: HeaderProps) => {
   return (
     <header className="flex items-center justify-between px-4 py-3 border-b border-border bg-card">
       <div className="flex items-center gap-2">
@@ -34,7 +35,16 @@ export const Header = ({ onSettingsClick, isConnected }: HeaderProps) => {
         <Button
           variant="ghost"
           size="icon"
-          className="h-8 w-8 text-slate-600 hover:text-slate-800"
+          className="h-8 w-8 text-muted-foreground hover:text-destructive"
+          onClick={onStartOver}
+          title="Start over"
+        >
+          <RotateCcw className="w-4 h-4" />
+        </Button>
+        <Button
+          variant="ghost"
+          size="icon"
+          className="h-8 w-8 text-muted-foreground hover:text-foreground"
           onClick={onSettingsClick}
         >
           <Settings className="w-4 h-4" />

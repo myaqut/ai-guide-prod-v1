@@ -347,6 +347,18 @@ export const ExtensionPopup = () => {
     );
   };
 
+  const handleRemoveField = (fieldId: string) => {
+    setRecommendations(prev => prev.filter(r => r.fieldId !== fieldId));
+    toast.info("Field removed");
+  };
+
+  const handleStartOver = () => {
+    setRecommendations([]);
+    setApprovedComponentName(null);
+    setActiveFieldId(null);
+    toast.success("All fields cleared");
+  };
+
   return (
     <div className="extension-popup flex flex-col bg-background overflow-hidden rounded-lg border border-border shadow-lg">
       {showSettings ? (
@@ -359,6 +371,7 @@ export const ExtensionPopup = () => {
         <>
           <Header
             onSettingsClick={() => setShowSettings(true)}
+            onStartOver={handleStartOver}
             isConnected={apiKeyConfigured}
           />
           <RecommendationList
@@ -368,6 +381,7 @@ export const ExtensionPopup = () => {
             onRefreshField={handleRefreshField}
             onApply={handleApply}
             onEditValue={handleEditValue}
+            onRemoveField={handleRemoveField}
             activeFieldId={activeFieldId}
           />
         </>

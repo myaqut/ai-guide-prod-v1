@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Check, Copy, ChevronDown, ChevronUp, Lightbulb, RefreshCw, Pencil, X } from "lucide-react";
+import { Check, Copy, ChevronDown, ChevronUp, Lightbulb, RefreshCw, Pencil, X, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
@@ -16,6 +16,7 @@ interface FieldCardProps {
   onApply?: (value: string) => void;
   onRefresh?: () => void;
   onEditValue?: (value: string) => void;
+  onRemove?: () => void;
 }
 
 export const FieldCard = ({
@@ -30,6 +31,7 @@ export const FieldCard = ({
   onApply,
   onRefresh,
   onEditValue,
+  onRemove,
 }: FieldCardProps) => {
   const [copied, setCopied] = useState(false);
   const [expanded, setExpanded] = useState(false);
@@ -103,6 +105,17 @@ export const FieldCard = ({
             >
               <RefreshCw className={cn("w-3 h-3", isLoading && "animate-spin")} />
             </Button>
+            {onRemove && (
+              <Button
+                variant="ghost"
+                size="xs"
+                onClick={onRemove}
+                className="h-5 w-5 p-0 text-muted-foreground hover:text-destructive"
+                title="Remove field"
+              >
+                <Trash2 className="w-3 h-3" />
+              </Button>
+            )}
           </div>
           {currentValue && (
             <p className="text-sm text-foreground/70 mt-0.5 truncate max-w-[200px]">
