@@ -130,6 +130,13 @@ export const FieldCard = ({
                 <Input
                   value={editedValue}
                   onChange={(e) => setEditedValue(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter' && editedValue.trim()) {
+                      handleApply();
+                    } else if (e.key === 'Escape') {
+                      handleCancelEdit();
+                    }
+                  }}
                   className="text-sm h-7 py-1"
                   placeholder="Enter custom value..."
                   autoFocus
