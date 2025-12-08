@@ -186,6 +186,13 @@ export const ExtensionPopup = () => {
   }, []);
 
   const loadNameField = async () => {
+    // CRITICAL: Clear all previous state before loading new Name field
+    setRecommendations([]);
+    setApprovedComponentName(null);
+    setNameFieldStatus('pending');
+    setUrlCache({});
+    setActiveFieldId(null);
+    
     if (isExtension) {
       try {
         // Get the active tab
@@ -202,9 +209,11 @@ export const ExtensionPopup = () => {
             
             if (response && response.field) {
               const nameField = response.field;
+              console.log('[ExtensionPopup] Received Name field from page:', nameField);
               setPageContext(response.pageContext || "LeanIX IT Component");
               processNameField(nameField);
             } else {
+              console.log('[ExtensionPopup] No Name field found on page');
               initializeWithMockName();
             }
           });
