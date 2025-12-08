@@ -104,6 +104,9 @@ export const ExtensionPopup = () => {
     // Always update active field ID
     setActiveFieldId(field.fieldId);
     
+    // CRITICAL: Don't generate recommendations until Name field is approved (unless this IS the Name field)
+    const isNameField = field.fieldName?.toLowerCase() === 'name';
+    
     // Use functional update to get latest state
     setRecommendations(prev => {
       const existingIndex = prev.findIndex(r => r.fieldId === field.fieldId);
@@ -115,27 +118,38 @@ export const ExtensionPopup = () => {
         const updatedField = { ...existing, currentValue: field.currentValue };
         
         // Schedule recommendation generation if needed (outside of setState)
+        // Only generate if Name is approved OR this is the Name field
         if (!existing.recommendation && !existing.isLoading) {
-          setTimeout(() => generateSingleFieldRecommendation(field), 0);
+          if (approvedComponentName || isNameField) {
+            setTimeout(() => generateSingleFieldRecommendation(field), 0);
+          } else {
+            console.log('[ExtensionPopup] Skipping recommendation - Name field not yet approved');
+          }
         }
         
         return [updatedField, ...updated];
       } else {
-        // New field - add at top with loading state
+        // New field - add at top
+        // Only set loading if we're actually going to generate
+        const shouldGenerate = !!(approvedComponentName || isNameField);
         const newField: FieldRecommendation = { 
           ...field, 
-          isLoading: true 
+          isLoading: shouldGenerate
         };
         
         // Schedule recommendation generation (outside of setState)
-        setTimeout(() => generateSingleFieldRecommendation(field), 0);
+        if (shouldGenerate) {
+          setTimeout(() => generateSingleFieldRecommendation(field), 0);
+        } else {
+          console.log('[ExtensionPopup] Skipping recommendation - Name field not yet approved');
+        }
         
         return [newField, ...prev];
       }
     });
     
     toast.info(`Field detected: ${field.fieldName}`, { duration: 2000 });
-  }, [generateSingleFieldRecommendation]);
+  }, [generateSingleFieldRecommendation, approvedComponentName]);
 
   // Handle refresh for a single field
   const handleRefreshField = useCallback((fieldId: string) => {
