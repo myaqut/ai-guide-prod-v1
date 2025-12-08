@@ -51,8 +51,13 @@ function isUrlFieldForCachedDate(fieldName: string): string | null {
   if (lowerFieldName.includes('url') && (lowerFieldName.includes('end of sale') || lowerFieldName.includes('eos'))) {
     return 'end_of_sale_date';
   }
-  // End of Standard Support URL should use End of Standard Support Date's URL
-  if (lowerFieldName.includes('url') && (lowerFieldName.includes('end of support') || lowerFieldName.includes('end of standard support') || lowerFieldName.includes('eol'))) {
+  // End of Standard Support URL / End Of Standard Support Date URL should use End of Standard Support Date's URL
+  if (lowerFieldName.includes('url') && (
+    lowerFieldName.includes('end of standard support') || 
+    lowerFieldName.includes('end of support') || 
+    lowerFieldName.includes('standard support') ||
+    lowerFieldName.includes('eol')
+  )) {
     return 'end_of_support_date';
   }
   
@@ -507,8 +512,9 @@ FOR URL FIELDS (Active URL, End of Sale Date URL, End of Standard Support URL, e
 - The URL must be from the OFFICIAL vendor website only.
 
 FOR DESCRIPTION FIELDS:
+- CRITICAL: Keep the description to MAXIMUM 100 characters
 - Use the search results to write a concise, accurate description
-- Include key features and purpose of the component
+- Include only the most essential features and purpose of the component
 
 FOR PROVIDER/VENDOR FIELDS:
 - Extract the vendor name from search results
