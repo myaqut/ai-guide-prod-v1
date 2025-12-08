@@ -151,8 +151,56 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
   return true; // Keep the message channel open for async response
 });
 
-// Find the Name field on the page
+// Find the Name field on the page - searches FRESH each time
 function findNameField() {
+  console.log('[LeanIX AI] Searching for Name field...');
+  
+  // First, try to find by label text "Name" and get associated input
+  const allLabels = document.querySelectorAll('label');
+  for (const label of allLabels) {
+    const labelText = label.textContent?.trim().replace(/\s*\*\s*$/, '').toLowerCase(); // Remove asterisk
+    if (labelText === 'name') {
+      console.log('[LeanIX AI] Found Name label:', label);
+      
+      // Try 'for' attribute
+      const forId = label.getAttribute('for');
+      if (forId) {
+        const input = document.getElementById(forId);
+        if (input) {
+          console.log('[LeanIX AI] Found input by for attribute:', input.value);
+          return extractFieldData(input, 'Name');
+        }
+      }
+      
+      // Try sibling input
+      const parent = label.parentElement;
+      if (parent) {
+        const input = parent.querySelector('input[type="text"], input:not([type]), textarea');
+        if (input) {
+          console.log('[LeanIX AI] Found input as sibling:', input.value);
+          return extractFieldData(input, 'Name');
+        }
+      }
+      
+      // Try nested input
+      const nestedInput = label.querySelector('input, textarea');
+      if (nestedInput) {
+        console.log('[LeanIX AI] Found nested input:', nestedInput.value);
+        return extractFieldData(nestedInput, 'Name');
+      }
+      
+      // Try next sibling element
+      const nextElement = label.nextElementSibling;
+      if (nextElement) {
+        const input = nextElement.matches('input, textarea') ? nextElement : nextElement.querySelector('input, textarea');
+        if (input) {
+          console.log('[LeanIX AI] Found input in next sibling:', input.value);
+          return extractFieldData(input, 'Name');
+        }
+      }
+    }
+  }
+  
   // Try various selectors to find the Name field
   const nameSelectors = [
     '[data-field-id="name"]',
@@ -167,8 +215,9 @@ function findNameField() {
     try {
       const element = document.querySelector(selector);
       if (element) {
-        const fieldData = extractFieldData(element);
-        if (fieldData && fieldData.fieldName.toLowerCase() === 'name') {
+        const fieldData = extractFieldData(element, 'Name');
+        if (fieldData) {
+          console.log('[LeanIX AI] Found Name by selector:', selector, fieldData.currentValue);
           return fieldData;
         }
       }
@@ -177,35 +226,17 @@ function findNameField() {
     }
   }
   
-  // Also try to find by label
-  const labels = document.querySelectorAll('label');
-  for (const label of labels) {
-    const labelText = label.textContent?.trim().toLowerCase();
-    if (labelText === 'name' || labelText === 'component name') {
-      const forId = label.getAttribute('for');
-      if (forId) {
-        const input = document.getElementById(forId);
-        if (input) {
-          return extractFieldData(input, label.textContent);
-        }
-      }
-      // Check for nested input
-      const nestedInput = label.querySelector('input, textarea');
-      if (nestedInput) {
-        return extractFieldData(nestedInput, label.textContent);
-      }
-    }
-  }
-  
-  // Fallback: look for any input that seems like a name field
+  // Last resort: find any text input that might be the name
   const allInputs = document.querySelectorAll('input[type="text"], input:not([type])');
   for (const input of allInputs) {
     const fieldData = extractFieldData(input);
     if (fieldData && fieldData.fieldName.toLowerCase() === 'name') {
+      console.log('[LeanIX AI] Found Name by input scan:', fieldData.currentValue);
       return fieldData;
     }
   }
   
+  console.log('[LeanIX AI] Name field not found');
   return null;
 }
 
