@@ -17,10 +17,11 @@ export interface Recommendation {
 
 export async function generateRecommendations(
   fields: FieldData[],
-  pageContext?: string
+  pageContext?: string,
+  componentName?: string
 ): Promise<Recommendation[]> {
   const { data, error } = await supabase.functions.invoke('generate-recommendations', {
-    body: { fields, pageContext },
+    body: { fields, pageContext, componentName },
   });
 
   if (error) {
