@@ -512,7 +512,7 @@ FOR URL FIELDS (Active URL, End of Sale Date URL, End of Standard Support URL, e
 - The URL must be from the OFFICIAL vendor website only.
 
 FOR DESCRIPTION FIELDS:
-- CRITICAL: Keep the description to MAXIMUM 100 characters
+- CRITICAL: Keep the description to MAXIMUM 250 characters
 - Use the search results to write a concise, accurate description
 - Include only the most essential features and purpose of the component
 
