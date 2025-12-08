@@ -322,8 +322,33 @@ function applyFieldValue(fieldId, value) {
         element.value = value;
       }
     } else if (element.getAttribute('contenteditable') === 'true') {
-      element.textContent = value;
-      element.innerHTML = value;
+      // Handle Tiptap/ProseMirror editors
+      element.focus();
+      
+      // Clear existing content
+      element.innerHTML = '';
+      
+      // For Tiptap, we need to insert content properly
+      // Try to find the Tiptap editor instance
+      const tiptapEditor = element.closest('.tiptap') || element.closest('.ProseMirror') || element;
+      
+      // Set the content
+      if (tiptapEditor.editor) {
+        // If Tiptap editor instance is accessible
+        tiptapEditor.editor.commands.setContent(value);
+      } else {
+        // Fallback: set innerHTML and dispatch events
+        element.innerHTML = `<p>${value}</p>`;
+        element.textContent = value;
+      }
+      
+      // Dispatch input event for Tiptap
+      element.dispatchEvent(new InputEvent('input', { 
+        bubbles: true, 
+        cancelable: true,
+        inputType: 'insertText',
+        data: value
+      }));
     } else {
       // Clear and set value
       element.focus();
@@ -341,6 +366,15 @@ function applyFieldValue(fieldId, value) {
     )?.set;
     if (nativeInputValueSetter && element.tagName === 'INPUT') {
       nativeInputValueSetter.call(element, value);
+      element.dispatchEvent(new Event('input', { bubbles: true }));
+    }
+    
+    // For contenteditable/Tiptap - also try native setter approach
+    const nativeTextContentSetter = Object.getOwnPropertyDescriptor(
+      window.HTMLElement.prototype, 'textContent'
+    )?.set;
+    if (nativeTextContentSetter && element.getAttribute('contenteditable') === 'true') {
+      nativeTextContentSetter.call(element, value);
       element.dispatchEvent(new Event('input', { bubbles: true }));
     }
     

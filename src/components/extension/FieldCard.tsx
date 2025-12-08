@@ -15,6 +15,7 @@ interface FieldCardProps {
   isActive?: boolean;
   onApply?: (value: string) => void;
   onRefresh?: () => void;
+  onEditValue?: (value: string) => void;
 }
 
 export const FieldCard = ({
@@ -28,6 +29,7 @@ export const FieldCard = ({
   isActive,
   onApply,
   onRefresh,
+  onEditValue,
 }: FieldCardProps) => {
   const [copied, setCopied] = useState(false);
   const [expanded, setExpanded] = useState(false);
@@ -46,6 +48,10 @@ export const FieldCard = ({
     const valueToApply = isEditing ? editedValue.trim() : recommendation;
     console.log('[FieldCard] handleApply called - isEditing:', isEditing, 'editedValue:', editedValue, 'valueToApply:', valueToApply);
     if (valueToApply && onApply) {
+      // Update parent's field value when applying edited value
+      if (isEditing && onEditValue) {
+        onEditValue(valueToApply);
+      }
       onApply(valueToApply);
       setIsEditing(false);
     }

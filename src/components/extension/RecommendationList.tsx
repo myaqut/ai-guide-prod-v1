@@ -18,6 +18,7 @@ interface RecommendationListProps {
   onRefresh: () => void;
   onRefreshField: (fieldId: string) => void;
   onApply: (fieldId: string, value: string) => void;
+  onEditValue: (fieldId: string, value: string) => void;
   activeFieldId?: string | null;
 }
 
@@ -27,6 +28,7 @@ export const RecommendationList = ({
   onRefresh,
   onRefreshField,
   onApply,
+  onEditValue,
   activeFieldId,
 }: RecommendationListProps) => {
   const hasRecommendations = recommendations.some(r => r.recommendation);
@@ -100,6 +102,7 @@ export const RecommendationList = ({
               isActive={rec.fieldId === activeFieldId}
               onApply={(value) => onApply(rec.fieldId, value)}
               onRefresh={() => onRefreshField(rec.fieldId)}
+              onEditValue={(value) => onEditValue(rec.fieldId, value)}
             />
           ))
         )}
