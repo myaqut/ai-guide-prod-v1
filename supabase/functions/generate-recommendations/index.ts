@@ -29,6 +29,9 @@ interface PerplexitySearchResult {
   urls: string[];
 }
 
+// Store URLs found during date field searches for reuse in URL fields
+const dateFieldUrlCache: Record<string, string[]> = {};
+
 // Check if a field is a lifecycle-related field (date or URL)
 function isLifecycleField(fieldName: string): boolean {
   const lifecycleKeywords = ['active', 'end of sale', 'end of support', 'end of life', 'lifecycle', 'eol', 'eos', 'release'];
@@ -36,54 +39,80 @@ function isLifecycleField(fieldName: string): boolean {
   return lifecycleKeywords.some(keyword => lowerName.includes(keyword));
 }
 
+// Check if this is a URL field that should use cached URL from date search
+function isUrlFieldForCachedDate(fieldName: string): string | null {
+  const lowerFieldName = fieldName.toLowerCase();
+  
+  // Active URL should use Active Date's URL
+  if (lowerFieldName.includes('url') && lowerFieldName.includes('active') && !lowerFieldName.includes('end')) {
+    return 'active_date';
+  }
+  // End of Sale URL should use End of Sale Date's URL
+  if (lowerFieldName.includes('url') && (lowerFieldName.includes('end of sale') || lowerFieldName.includes('eos'))) {
+    return 'end_of_sale_date';
+  }
+  // End of Standard Support URL should use End of Standard Support Date's URL
+  if (lowerFieldName.includes('url') && (lowerFieldName.includes('end of support') || lowerFieldName.includes('end of standard support') || lowerFieldName.includes('eol'))) {
+    return 'end_of_support_date';
+  }
+  
+  return null;
+}
+
+// Get the cache key for a date field
+function getDateFieldCacheKey(fieldName: string): string | null {
+  const lowerFieldName = fieldName.toLowerCase();
+  
+  if (lowerFieldName.includes('active date') || (lowerFieldName.includes('active') && lowerFieldName.includes('date') && !lowerFieldName.includes('end'))) {
+    return 'active_date';
+  }
+  if (lowerFieldName.includes('end of sale') || lowerFieldName.includes('eos')) {
+    return 'end_of_sale_date';
+  }
+  if (lowerFieldName.includes('end of support') || lowerFieldName.includes('end of standard support') || lowerFieldName.includes('end of life') || lowerFieldName.includes('eol')) {
+    return 'end_of_support_date';
+  }
+  
+  return null;
+}
+
 // Build a search query based on field type
 function buildFieldSearchQuery(componentName: string, fieldName: string): string {
   const lowerFieldName = fieldName.toLowerCase();
   
-  // Date-related fields
+  // Date-related fields - emphasize official sources
   if (lowerFieldName.includes('active date') || lowerFieldName.includes('release')) {
-    return `"${componentName}" official release date version announcement from vendor YYYY-MM-DD`;
+    return `"${componentName}" official release date version announcement from official vendor website YYYY-MM-DD`;
   }
   if (lowerFieldName.includes('end of sale') || lowerFieldName.includes('eos')) {
-    return `"${componentName}" end of sale date official announcement YYYY-MM-DD`;
+    return `"${componentName}" end of sale date official announcement from official vendor website YYYY-MM-DD`;
   }
   if (lowerFieldName.includes('end of support') || lowerFieldName.includes('end of life') || lowerFieldName.includes('eol')) {
-    return `"${componentName}" end of life end of support date official YYYY-MM-DD`;
+    return `"${componentName}" end of life end of support date official from official vendor website YYYY-MM-DD`;
   }
   
-  // URL fields - search for the corresponding date source
-  if (lowerFieldName.includes('url') && lowerFieldName.includes('active')) {
-    return `"${componentName}" release announcement official page lifecycle URL`;
-  }
-  if (lowerFieldName.includes('url') && (lowerFieldName.includes('end of sale') || lowerFieldName.includes('eos'))) {
-    return `"${componentName}" end of sale announcement official page URL`;
-  }
-  if (lowerFieldName.includes('url') && (lowerFieldName.includes('end of support') || lowerFieldName.includes('eol'))) {
-    return `"${componentName}" lifecycle support policy official page URL`;
-  }
-  
-  // Description field
+  // Description field - emphasize official sources
   if (lowerFieldName.includes('description')) {
-    return `"${componentName}" product description features overview what is`;
+    return `"${componentName}" product description features overview from official website`;
   }
   
   // Provider/Vendor field
   if (lowerFieldName.includes('provider') || lowerFieldName.includes('vendor')) {
-    return `"${componentName}" vendor company manufacturer who makes`;
+    return `"${componentName}" official vendor company manufacturer`;
   }
   
   // Category field
   if (lowerFieldName.includes('category') || lowerFieldName.includes('type')) {
-    return `"${componentName}" software type category classification what kind of software`;
+    return `"${componentName}" software type category classification from official documentation`;
   }
   
   // Lifecycle status
   if (lowerFieldName.includes('lifecycle') || lowerFieldName.includes('status')) {
-    return `"${componentName}" lifecycle status current support active or end of life`;
+    return `"${componentName}" lifecycle status current support from official vendor website`;
   }
   
-  // Default query for lifecycle info
-  return `"${componentName}" official product lifecycle dates release end of support`;
+  // Default query for lifecycle info - emphasize official sources
+  return `"${componentName}" official product lifecycle dates release end of support from official vendor website`;
 }
 
 // Extract vendor/provider from component name for official site search
@@ -188,13 +217,15 @@ If NOT found on ${vendorDomain}, you may search other sources BUT you MUST expli
 
 ${searchInstruction}
 
-IMPORTANT RULES:
-1. For dates, always provide in YYYY-MM-DD format when available.
-2. Always cite the EXACT URL where the information was found.
-3. If information comes from a third-party site (not the official vendor), you MUST note this clearly.
-4. Focus ONLY on the exact product asked about, not similar products or different versions.
-5. Prefer official documentation, release notes, lifecycle pages, and support announcements.
-6. If you cannot find official information, clearly state "Official source not found" in your response.`
+CRITICAL RULES - OFFICIAL SOURCES ONLY:
+1. You MUST prioritize and use ONLY official vendor websites and documentation.
+2. For dates, always provide in YYYY-MM-DD format when available.
+3. Always cite the EXACT official URL where the information was found.
+4. If information comes from a third-party site (not the official vendor), you MUST clearly state: "NOT FROM OFFICIAL SOURCE".
+5. Focus ONLY on the exact product asked about, not similar products or different versions.
+6. ONLY use official documentation, release notes, lifecycle pages, and support announcements.
+7. If you cannot find official information, clearly state "Official source not found" in your response.
+8. DO NOT use Wikipedia, blogs, or other unofficial sources as primary references.`
           },
           {
             role: 'user',
@@ -263,11 +294,13 @@ async function searchFieldInfoFallback(componentName: string, fieldName: string,
         messages: [
           {
             role: 'system',
-            content: `You are a product research assistant. Search for official information preferably from vendor sources.
-IMPORTANT: If the information is NOT from the official website (${vendorDomain}), explicitly state this.
+            content: `You are a product research assistant. Search for OFFICIAL vendor information ONLY.
+CRITICAL: You MUST prioritize official vendor websites and documentation.
+IMPORTANT: If the information is NOT from the official website (${vendorDomain}), explicitly state "NOT FROM OFFICIAL SOURCE".
 For dates, always provide in YYYY-MM-DD format when available.
-Always cite the exact URL where the information was found.
-Focus ONLY on the exact product asked about, not similar products.`
+Always cite the EXACT official URL where the information was found.
+Focus ONLY on the exact product asked about, not similar products.
+DO NOT use Wikipedia, blogs, or other unofficial sources as primary references.`
           },
           {
             role: 'user',
@@ -345,11 +378,25 @@ serve(async (req) => {
     console.log('Using component name for search:', componentName);
 
     // For each field, search for specific info using Perplexity
+    // Clear the URL cache for this request
+    for (const key in dateFieldUrlCache) {
+      delete dateFieldUrlCache[key];
+    }
+    
     let searchResults: Record<string, PerplexitySearchResult | null> = {};
     
     if (componentName) {
-      // Search for each field that needs web search
+      // First pass: Search for date fields and cache their URLs
       for (const field of fields) {
+        const cacheKey = getDateFieldCacheKey(field.fieldName);
+        const isUrlField = isUrlFieldForCachedDate(field.fieldName);
+        
+        // Skip URL fields in first pass - they will use cached URLs
+        if (isUrlField) {
+          console.log(`Skipping URL field (will use cached URL): ${field.fieldName}`);
+          continue;
+        }
+        
         const needsSearch = isLifecycleField(field.fieldName) || 
                            field.fieldName.toLowerCase().includes('description') ||
                            field.fieldName.toLowerCase().includes('provider') ||
@@ -359,6 +406,36 @@ serve(async (req) => {
           console.log(`Searching info for field: ${field.fieldName}`);
           const result = await searchFieldInfo(componentName, field.fieldName);
           searchResults[field.fieldId] = result;
+          
+          // Cache URLs for date fields so URL fields can reuse them
+          if (cacheKey && result && result.urls && result.urls.length > 0) {
+            dateFieldUrlCache[cacheKey] = result.urls;
+            console.log(`Cached URLs for ${cacheKey}:`, result.urls);
+          }
+        }
+      }
+      
+      // Second pass: Handle URL fields using cached URLs from date searches
+      for (const field of fields) {
+        const urlCacheKey = isUrlFieldForCachedDate(field.fieldName);
+        
+        if (urlCacheKey) {
+          const cachedUrls = dateFieldUrlCache[urlCacheKey];
+          if (cachedUrls && cachedUrls.length > 0) {
+            // Use the first official URL from the date field search
+            const officialUrl = cachedUrls[0];
+            console.log(`Using cached URL for ${field.fieldName} from ${urlCacheKey}: ${officialUrl}`);
+            searchResults[field.fieldId] = {
+              content: `Official source URL from corresponding date field search: ${officialUrl}`,
+              urls: cachedUrls
+            };
+          } else {
+            console.log(`No cached URL found for ${field.fieldName} (cache key: ${urlCacheKey})`);
+            searchResults[field.fieldId] = {
+              content: 'No official URL was found during the date field search. The corresponding date field did not return any official source URLs.',
+              urls: []
+            };
+          }
         }
       }
     }
@@ -409,10 +486,12 @@ FOR DATE FIELDS (Active Date, End of Sale Date, End of Standard Support, etc.):
 - If search results contain the date, use it with high confidence (0.9+)
 - If no date found, set confidence to 0.5 and explain
 
-FOR URL FIELDS (Active Date URL, End of Sale Date URL, etc.):
-- The URL MUST point to the EXACT same source as the corresponding date field
-- Use the lifecycle URL from search results if available
-- Recommend direct URL to the lifecycle/support page
+FOR URL FIELDS (Active URL, End of Sale Date URL, End of Standard Support URL, etc.):
+- CRITICAL: Do NOT search for new URLs. Use ONLY the URL that was already found during the corresponding date field search.
+- The URL recommendation MUST be the EXACT same official URL used to find the date.
+- If the search results show "Official source URL from corresponding date field search", use that URL directly.
+- If no URL was found during date search, recommend an empty value with low confidence.
+- The URL must be from the OFFICIAL vendor website only.
 
 FOR DESCRIPTION FIELDS:
 - Use the search results to write a concise, accurate description
