@@ -32,20 +32,75 @@ function shouldIgnoreField(fieldName, fieldId) {
 // Listen for focus events on input fields
 document.addEventListener('focusin', (event) => {
   const element = event.target;
-  if (element.matches('input, textarea, select, [contenteditable="true"]')) {
-    const fieldData = extractFieldData(element);
+  
+  // Check if clicked element or any parent is an input/form field
+  let targetElement = element;
+  
+  // If clicked element isn't directly an input, check if it's inside a field container
+  if (!element.matches('input, textarea, select, [contenteditable="true"]')) {
+    // Look for input inside the clicked element
+    const innerInput = element.querySelector('input, textarea, select, [contenteditable="true"]');
+    if (innerInput) {
+      targetElement = innerInput;
+    } else {
+      // Check parent elements for field containers
+      const parentField = element.closest('[data-field-id], [data-field-name], .field-container, [class*="field"]');
+      if (parentField) {
+        const innerInput = parentField.querySelector('input, textarea, select, [contenteditable="true"]');
+        if (innerInput) {
+          targetElement = innerInput;
+        }
+      }
+    }
+  }
+  
+  if (targetElement.matches('input, textarea, select, [contenteditable="true"]')) {
+    const fieldData = extractFieldData(targetElement);
     if (fieldData && !shouldIgnoreField(fieldData.fieldName, fieldData.fieldId)) {
+      // Only notify if it's a different field
+      const isNewField = !activeField || activeField.fieldId !== fieldData.fieldId;
       activeField = fieldData;
-      console.log('[LeanIX AI] Active field detected:', activeField);
       
-      // Notify popup about new active field
+      console.log('[LeanIX AI] Active field detected:', activeField.fieldName, activeField.fieldId);
+      
+      // Always notify popup about active field
       try {
         chrome.runtime.sendMessage({
           action: 'activeFieldChanged',
           field: activeField
         });
       } catch (e) {
-        // Popup might not be open
+        console.log('[LeanIX AI] Could not send message to popup');
+      }
+    }
+  }
+}, true);
+
+// Also listen for click events to catch clicks on field labels/containers
+document.addEventListener('click', (event) => {
+  const element = event.target;
+  
+  // Check if clicked on a label or field container
+  const label = element.closest('label');
+  if (label) {
+    const forId = label.getAttribute('for');
+    if (forId) {
+      const input = document.getElementById(forId);
+      if (input) {
+        const fieldData = extractFieldData(input, label.textContent);
+        if (fieldData && !shouldIgnoreField(fieldData.fieldName, fieldData.fieldId)) {
+          activeField = fieldData;
+          console.log('[LeanIX AI] Field detected via label click:', activeField.fieldName);
+          
+          try {
+            chrome.runtime.sendMessage({
+              action: 'activeFieldChanged',
+              field: activeField
+            });
+          } catch (e) {
+            // Popup might not be open
+          }
+        }
       }
     }
   }
