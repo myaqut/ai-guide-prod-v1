@@ -121,33 +121,35 @@ export const FieldCard = ({
           </div>
           <span className="text-xs text-muted-foreground">Analyzing...</span>
         </div>
-      ) : recommendation || isEditing ? (
+      ) : (
         <>
-          <div className="bg-muted/50 rounded-md p-2 mb-2">
-            <div className="flex items-start gap-2">
-              <Lightbulb className="w-3.5 h-3.5 text-primary mt-0.5 shrink-0" />
-              {isEditing ? (
-                <Input
-                  value={editedValue}
-                  onChange={(e) => setEditedValue(e.target.value)}
-                  onKeyDown={(e) => {
-                    if (e.key === 'Enter' && editedValue.trim()) {
-                      handleApply();
-                    } else if (e.key === 'Escape') {
-                      handleCancelEdit();
-                    }
-                  }}
-                  className="text-sm h-7 py-1"
-                  placeholder="Enter custom value..."
-                  autoFocus
-                />
-              ) : (
-                <p className="text-sm text-foreground font-medium break-words">
-                  {recommendation}
-                </p>
-              )}
+          {(recommendation || isEditing) && (
+            <div className="bg-muted/50 rounded-md p-2 mb-2">
+              <div className="flex items-start gap-2">
+                <Lightbulb className="w-3.5 h-3.5 text-primary mt-0.5 shrink-0" />
+                {isEditing ? (
+                  <Input
+                    value={editedValue}
+                    onChange={(e) => setEditedValue(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter' && editedValue.trim()) {
+                        handleApply();
+                      } else if (e.key === 'Escape') {
+                        handleCancelEdit();
+                      }
+                    }}
+                    className="text-sm h-7 py-1"
+                    placeholder="Enter custom value..."
+                    autoFocus
+                  />
+                ) : (
+                  <p className="text-sm text-foreground font-medium break-words">
+                    {recommendation}
+                  </p>
+                )}
+              </div>
             </div>
-          </div>
+          )}
 
           {/* Reasoning toggle */}
           {reasoning && !isEditing && (
@@ -166,14 +168,21 @@ export const FieldCard = ({
             </p>
           )}
 
-          {/* Actions */}
+          {/* No recommendation message */}
+          {!recommendation && !isEditing && (
+            <p className="text-xs text-muted-foreground py-2 mb-2">
+              Click to load recommendation or enter manually
+            </p>
+          )}
+
+          {/* Actions - always show */}
           <div className="flex gap-2">
             <Button
               variant="glow"
               size="xs"
               onClick={handleApply}
               className="flex-1"
-              disabled={isEditing && !editedValue.trim()}
+              disabled={isEditing ? !editedValue.trim() : !recommendation}
             >
               <Check className="w-3 h-3" />
               Apply
@@ -190,15 +199,12 @@ export const FieldCard = ({
               variant="outline"
               size="xs"
               onClick={handleCopy}
+              disabled={!recommendation && !isEditing}
             >
               {copied ? <Check className="w-3 h-3" /> : <Copy className="w-3 h-3" />}
             </Button>
           </div>
         </>
-      ) : (
-        <p className="text-xs text-muted-foreground py-2">
-          No recommendation available
-        </p>
       )}
     </div>
   );
