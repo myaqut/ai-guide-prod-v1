@@ -95,19 +95,24 @@ function getDateFieldCacheKey(fieldName: string): string | null {
   return null;
 }
 
-// Build a search query based on field type
-function buildFieldSearchQuery(componentName: string, fieldName: string): string {
+// Build a search query based on field type - prioritizing official sources
+function buildFieldSearchQuery(componentName: string, fieldName: string, vendorDomain?: string): string {
   const lowerFieldName = fieldName.toLowerCase();
+  
+  // Build the official source emphasis based on vendor
+  const officialSourceHint = vendorDomain 
+    ? `site:${vendorDomain} OR official product lifecycle page` 
+    : 'from official vendor website documentation release notes';
   
   // Active field - search for RELEASE DATE from official vendor
   if (lowerFieldName === 'active' || lowerFieldName.includes('active date') || (lowerFieldName.includes('active') && !lowerFieldName.includes('url'))) {
-    return `"${componentName}" official release date initial release announcement from official vendor website YYYY-MM-DD`;
+    return `"${componentName}" official release date GA date general availability announcement ${officialSourceHint} YYYY-MM-DD`;
   }
   if (lowerFieldName.includes('end of sale') || lowerFieldName.includes('eos')) {
-    return `"${componentName}" end of sale date official announcement from official vendor website YYYY-MM-DD`;
+    return `"${componentName}" end of sale date end of marketing date official lifecycle ${officialSourceHint} YYYY-MM-DD`;
   }
   if (lowerFieldName.includes('end of support') || lowerFieldName.includes('end of life') || lowerFieldName.includes('eol')) {
-    return `"${componentName}" end of life end of support date official from official vendor website YYYY-MM-DD`;
+    return `"${componentName}" end of life end of support EOL date official lifecycle policy ${officialSourceHint} YYYY-MM-DD`;
   }
   
   // Description field - general product description (not version-specific)
@@ -119,7 +124,7 @@ function buildFieldSearchQuery(componentName: string, fieldName: string): string
   
   // Provider/Vendor field
   if (lowerFieldName.includes('provider') || lowerFieldName.includes('vendor')) {
-    return `"${componentName}" official vendor company manufacturer`;
+    return `"${componentName}" official vendor company manufacturer developer`;
   }
   
   // Category field
@@ -129,65 +134,142 @@ function buildFieldSearchQuery(componentName: string, fieldName: string): string
   
   // Lifecycle status
   if (lowerFieldName.includes('lifecycle') || lowerFieldName.includes('status')) {
-    return `"${componentName}" lifecycle status current support from official vendor website`;
+    return `"${componentName}" lifecycle status current support ${officialSourceHint}`;
   }
   
   // Default query for lifecycle info - emphasize official sources
-  return `"${componentName}" official product lifecycle dates release end of support from official vendor website`;
+  return `"${componentName}" official product lifecycle dates release end of support ${officialSourceHint}`;
 }
 
 // Extract vendor/provider from component name for official site search
 function extractVendorDomain(componentName: string): string | null {
   const vendorDomains: Record<string, string> = {
-    'google': 'google.com',
-    'microsoft': 'microsoft.com',
+    // Major cloud providers
+    'google': 'cloud.google.com',
+    'microsoft': 'learn.microsoft.com',
+    'azure': 'learn.microsoft.com',
     'oracle': 'oracle.com',
     'ibm': 'ibm.com',
     'amazon': 'aws.amazon.com',
     'aws': 'aws.amazon.com',
+    // Databases
     'mongodb': 'mongodb.com',
-    'apache': 'apache.org',
-    'redis': 'redis.io',
     'postgresql': 'postgresql.org',
+    'postgres': 'postgresql.org',
     'mysql': 'mysql.com',
+    'mariadb': 'mariadb.com',
+    'redis': 'redis.io',
+    'couchbase': 'couchbase.com',
+    'cassandra': 'cassandra.apache.org',
+    'neo4j': 'neo4j.com',
+    // Infrastructure & DevOps
+    'apache': 'apache.org',
     'docker': 'docker.com',
     'kubernetes': 'kubernetes.io',
     'nginx': 'nginx.com',
+    'hashicorp': 'hashicorp.com',
+    'terraform': 'hashicorp.com',
+    'vault': 'hashicorp.com',
+    'consul': 'hashicorp.com',
+    'ansible': 'ansible.com',
+    'puppet': 'puppet.com',
+    'chef': 'chef.io',
+    // Elastic & Search
     'elastic': 'elastic.co',
     'elasticsearch': 'elastic.co',
+    'kibana': 'elastic.co',
+    'logstash': 'elastic.co',
+    // Virtualization
     'vmware': 'vmware.com',
+    'broadcom vmware': 'vmware.com',
+    'citrix': 'citrix.com',
+    'proxmox': 'proxmox.com',
+    // Enterprise software
     'salesforce': 'salesforce.com',
     'sap': 'sap.com',
     'adobe': 'adobe.com',
     'atlassian': 'atlassian.com',
-    'github': 'github.com',
-    'gitlab': 'gitlab.com',
-    'hashicorp': 'hashicorp.com',
-    'terraform': 'hashicorp.com',
-    'vault': 'hashicorp.com',
+    'jira': 'atlassian.com',
+    'confluence': 'atlassian.com',
+    // Version control & CI/CD
+    'github': 'docs.github.com',
+    'gitlab': 'docs.gitlab.com',
+    'bitbucket': 'atlassian.com',
+    'jenkins': 'jenkins.io',
+    'circleci': 'circleci.com',
+    // Monitoring & Analytics
     'datadog': 'datadoghq.com',
     'splunk': 'splunk.com',
+    'grafana': 'grafana.com',
+    'prometheus': 'prometheus.io',
+    'newrelic': 'newrelic.com',
+    'dynatrace': 'dynatrace.com',
+    // Data platforms
     'snowflake': 'snowflake.com',
     'databricks': 'databricks.com',
     'confluent': 'confluent.io',
     'kafka': 'kafka.apache.org',
+    'spark': 'spark.apache.org',
+    'hadoop': 'hadoop.apache.org',
+    // Web frameworks
     'angular': 'angular.dev',
     'react': 'react.dev',
     'vue': 'vuejs.org',
+    'next': 'nextjs.org',
+    'nuxt': 'nuxt.com',
+    'svelte': 'svelte.dev',
+    // Programming languages & runtimes
     'node': 'nodejs.org',
     'python': 'python.org',
     'java': 'oracle.com',
+    'openjdk': 'openjdk.org',
     'spring': 'spring.io',
-    'redhat': 'redhat.com',
+    'dotnet': 'dotnet.microsoft.com',
+    '.net': 'dotnet.microsoft.com',
+    'ruby': 'ruby-lang.org',
+    'php': 'php.net',
+    'golang': 'go.dev',
+    'rust': 'rust-lang.org',
+    // Operating systems
+    'redhat': 'access.redhat.com',
+    'rhel': 'access.redhat.com',
     'ubuntu': 'ubuntu.com',
     'canonical': 'canonical.com',
-    'citrix': 'citrix.com',
+    'centos': 'centos.org',
+    'debian': 'debian.org',
+    'suse': 'suse.com',
+    'windows server': 'learn.microsoft.com',
+    // Hardware vendors
     'cisco': 'cisco.com',
     'dell': 'dell.com',
     'hp': 'hp.com',
+    'hpe': 'hpe.com',
+    'lenovo': 'lenovo.com',
     'intel': 'intel.com',
     'nvidia': 'nvidia.com',
     'amd': 'amd.com',
+    // Security
+    'palo alto': 'paloaltonetworks.com',
+    'fortinet': 'fortinet.com',
+    'crowdstrike': 'crowdstrike.com',
+    'okta': 'okta.com',
+    'auth0': 'auth0.com',
+    // Document & comparison tools
+    'draftable': 'draftable.com',
+    'workshare': 'workshare.com',
+    'litera': 'litera.com',
+    // Communication
+    'slack': 'slack.com',
+    'zoom': 'zoom.us',
+    'twilio': 'twilio.com',
+    // Other
+    'vercel': 'vercel.com',
+    'netlify': 'netlify.com',
+    'heroku': 'heroku.com',
+    'digitalocean': 'digitalocean.com',
+    'cloudflare': 'cloudflare.com',
+    'akamai': 'akamai.com',
+    'f5': 'f5.com',
   };
   
   const lowerName = componentName.toLowerCase();
@@ -207,8 +289,8 @@ async function searchFieldInfo(componentName: string, fieldName: string): Promis
   }
 
   try {
-    const searchQuery = buildFieldSearchQuery(componentName, fieldName);
     const vendorDomain = extractVendorDomain(componentName);
+    const searchQuery = buildFieldSearchQuery(componentName, fieldName, vendorDomain || undefined);
     
     // Build search instruction prioritizing official website
     let searchInstruction = '';
