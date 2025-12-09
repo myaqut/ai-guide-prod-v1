@@ -600,6 +600,12 @@ FOR DATE FIELDS (Active Date, End of Sale Date, End of Standard Support, etc.):
 - In the reasoning, ALWAYS include the official source URL where this date was found
 - If search results contain the date, use it with high confidence (0.9+)
 - If no date found, set confidence to 0.5 and explain
+- CRITICAL VERSION MATCHING: Match the EXACT version in the component name.
+  * If the component is "Product 25.10" (no patch number), this means version 25.10.0 - use the release date for 25.10.0 specifically, NOT 25.10.100 or 25.10.300
+  * Version "25.10" = "25.10.0" (the initial .0 release of that minor version)
+  * Version "25.10.100" or "25.10.300" are DIFFERENT versions - do NOT use their dates
+  * If the search results show multiple version dates, pick the one matching the EXACT version in the component name
+  * If the exact version date is not found, set confidence to 0.5 and explain which versions were found
 
 FOR URL FIELDS (Active URL, End of Sale Date URL, End of Standard Support URL, etc.):
 - CRITICAL: Do NOT search for new URLs. Use ONLY the URL that was already found during the corresponding date field search.
