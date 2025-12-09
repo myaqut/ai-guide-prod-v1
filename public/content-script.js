@@ -3,6 +3,12 @@
 
 console.log('[LeanIX AI] Content script loaded');
 
+// Debug mode - set to false for production
+const DEBUG = false;
+function log(...args) {
+  if (DEBUG) console.log('[LeanIX AI]', ...args);
+}
+
 // Fields to ignore
 const IGNORED_FIELDS = [
   'external id',
@@ -12,6 +18,10 @@ const IGNORED_FIELDS = [
   'productid',
   'product_id',
 ];
+
+// LeanIX custom select selectors (reusable)
+const LX_SELECT_SELECTORS = 'lx-relating-fact-sheet-select, lx-single-select, lx-fact-sheet-select';
+const LX_SELECT_CONTAINERS = '.selectContainer, .selectionContainer, .inputContainer';
 
 // Store for currently focused/active field
 let activeField = null;
@@ -29,37 +39,46 @@ function shouldIgnoreField(fieldName, fieldId) {
   );
 }
 
+// Safe element.matches wrapper
+function safeMatches(element, selector) {
+  try {
+    return element && typeof element.matches === 'function' && element.matches(selector);
+  } catch (e) {
+    return false;
+  }
+}
+
 // Check if element is an editable field (including Tiptap/ProseMirror and custom dropdowns)
 function isEditableElement(element) {
   if (!element) return false;
   
   // Standard form elements and contenteditable
-  if (element.matches('input, textarea, select, [contenteditable="true"], .tiptap, .ProseMirror')) {
+  if (safeMatches(element, 'input, textarea, select, [contenteditable="true"], .tiptap, .ProseMirror')) {
     return true;
   }
   
   // LeanIX custom select components
-  if (element.matches('lx-single-select, lx-relating-fact-sheet-select, lx-fact-sheet-select, lx-dropdown-with-tree-view')) {
+  if (safeMatches(element, LX_SELECT_SELECTORS + ', lx-dropdown-with-tree-view')) {
     return true;
   }
   
   // LeanIX select container and input elements
-  if (element.matches('.selectContainer, .queryInput, .selectionContainer')) {
-    return true;
-  }
-  
-  // Custom dropdown/select components (common patterns)
-  if (element.matches('[role="combobox"], [role="listbox"], [role="option"], [data-select], [class*="select" i], [class*="dropdown" i], [class*="picker" i]')) {
+  if (safeMatches(element, LX_SELECT_CONTAINERS + ', .queryInput')) {
     return true;
   }
   
   // Check for data-field-name attribute (LeanIX specific)
-  if (element.hasAttribute('data-field-name') || element.hasAttribute('data-field-target-selector')) {
+  if (element.hasAttribute && (element.hasAttribute('data-field-name') || element.hasAttribute('data-field-target-selector'))) {
+    return true;
+  }
+  
+  // Custom dropdown/select components with specific attributes
+  if (safeMatches(element, '[role="combobox"], [role="listbox"], [data-select]')) {
     return true;
   }
   
   // Check for aria attributes indicating a select-like element
-  if (element.hasAttribute('aria-haspopup') || element.hasAttribute('aria-expanded')) {
+  if (element.hasAttribute && (element.hasAttribute('aria-haspopup') || element.hasAttribute('aria-expanded'))) {
     return true;
   }
   
@@ -71,13 +90,13 @@ function findEditableElement(element) {
   if (!element) return null;
   
   // Check for LeanIX custom select components first (bubble up from clicked element)
-  const lxSelect = element.closest('lx-relating-fact-sheet-select, lx-single-select, lx-fact-sheet-select');
+  const lxSelect = element.closest(LX_SELECT_SELECTORS);
   if (lxSelect) return lxSelect;
   
   // Check if we're inside a .selectContainer (LeanIX dropdown)
-  const selectContainer = element.closest('.selectContainer');
+  const selectContainer = element.closest(LX_SELECT_CONTAINERS);
   if (selectContainer) {
-    const parentSelect = selectContainer.closest('lx-relating-fact-sheet-select, lx-single-select, lx-fact-sheet-select');
+    const parentSelect = selectContainer.closest(LX_SELECT_SELECTORS);
     if (parentSelect) return parentSelect;
     return selectContainer;
   }
@@ -96,17 +115,17 @@ function findEditableElement(element) {
   if (input) return input;
   
   // Check for LeanIX custom selects inside
-  const lxSelectInside = element.querySelector('lx-relating-fact-sheet-select, lx-single-select, lx-fact-sheet-select');
+  const lxSelectInside = element.querySelector(LX_SELECT_SELECTORS);
   if (lxSelectInside) return lxSelectInside;
   
   // Check for custom dropdown/select components
-  const customSelect = element.querySelector('[role="combobox"], [role="listbox"], [data-select], [class*="select" i]:not(style):not(script), [class*="dropdown" i]:not(style):not(script)');
+  const customSelect = element.querySelector('[role="combobox"], [role="listbox"], [data-select]');
   if (customSelect) return customSelect;
   
   // Check parent elements for field containers
-  const parentField = element.closest('[data-field-id], [data-field-name], .field-container, [class*="field"]');
+  const parentField = element.closest('[data-field-id], [data-field-name], .field-container');
   if (parentField) {
-    const nestedLxSelect = parentField.querySelector('lx-relating-fact-sheet-select, lx-single-select, lx-fact-sheet-select');
+    const nestedLxSelect = parentField.querySelector(LX_SELECT_SELECTORS);
     if (nestedLxSelect) return nestedLxSelect;
     
     const nestedTiptap = parentField.querySelector('.tiptap, .ProseMirror, [contenteditable="true"]');
@@ -114,40 +133,43 @@ function findEditableElement(element) {
     
     const nestedInput = parentField.querySelector('input, textarea, select');
     if (nestedInput) return nestedInput;
-    
-    const nestedCustomSelect = parentField.querySelector('[role="combobox"], [role="listbox"], [data-select]');
-    if (nestedCustomSelect) return nestedCustomSelect;
   }
   
   return null;
 }
 
+// Notify popup about active field change
+function notifyActiveFieldChange(fieldData) {
+  if (!fieldData || shouldIgnoreField(fieldData.fieldName, fieldData.fieldId)) {
+    return false;
+  }
+  
+  activeField = fieldData;
+  log('Active field set:', activeField.fieldName, activeField.fieldId);
+  
+  try {
+    chrome.runtime.sendMessage({
+      action: 'activeFieldChanged',
+      field: activeField
+    });
+    return true;
+  } catch (e) {
+    log('Could not send message to popup');
+    return false;
+  }
+}
+
 // Listen for focus events on input fields
 document.addEventListener('focusin', (event) => {
   const element = event.target;
-  console.log('[LeanIX AI] Focusin event on:', element.tagName, element.className);
+  log('Focusin event on:', element.tagName, element.className);
   
   const targetElement = findEditableElement(element);
   
   if (targetElement && isEditableElement(targetElement)) {
     const fieldData = extractFieldData(targetElement);
-    console.log('[LeanIX AI] Extracted field data:', fieldData);
-    
-    if (fieldData && !shouldIgnoreField(fieldData.fieldName, fieldData.fieldId)) {
-      activeField = fieldData;
-      
-      console.log('[LeanIX AI] Active field detected:', activeField.fieldName, activeField.fieldId);
-      
-      // Always notify popup about active field
-      try {
-        chrome.runtime.sendMessage({
-          action: 'activeFieldChanged',
-          field: activeField
-        });
-      } catch (e) {
-        console.log('[LeanIX AI] Could not send message to popup');
-      }
-    }
+    log('Extracted field data:', fieldData);
+    notifyActiveFieldChange(fieldData);
   }
 }, true);
 
@@ -155,62 +177,36 @@ document.addEventListener('focusin', (event) => {
 document.addEventListener('click', (event) => {
   const element = event.target;
   
-  console.log('[LeanIX AI] Click on element:', element.tagName, element.className?.substring?.(0, 50));
+  log('Click on element:', element.tagName, element.className?.substring?.(0, 50));
   
-  // Check if clicked inside a LeanIX select component - find the outermost lx-relating-fact-sheet-select
-  let lxSelect = element.closest('lx-relating-fact-sheet-select');
+  // Find LeanIX select component - prioritize lx-relating-fact-sheet-select with data-field-name
+  let lxSelect = element.closest('lx-relating-fact-sheet-select[data-field-name]');
   
-  // If not found directly, check if we're inside lx-single-select or lx-fact-sheet-select
+  // If not found, check inner components and traverse up
   if (!lxSelect) {
-    const innerSelect = element.closest('lx-single-select, lx-fact-sheet-select');
+    const innerSelect = element.closest(LX_SELECT_SELECTORS);
     if (innerSelect) {
-      // Look for parent lx-relating-fact-sheet-select
-      lxSelect = innerSelect.closest('lx-relating-fact-sheet-select');
-      if (!lxSelect) {
-        // Use the inner select if no parent found
-        lxSelect = innerSelect;
-      }
+      lxSelect = innerSelect.closest('lx-relating-fact-sheet-select[data-field-name]') || innerSelect;
     }
   }
   
-  // Also check for selectContainer clicks
+  // Check for selectContainer clicks
   if (!lxSelect) {
-    const selectContainer = element.closest('.selectContainer, .selectionContainer, .inputContainer');
+    const selectContainer = element.closest(LX_SELECT_CONTAINERS);
     if (selectContainer) {
-      lxSelect = selectContainer.closest('lx-relating-fact-sheet-select, lx-single-select, lx-fact-sheet-select');
+      lxSelect = selectContainer.closest('lx-relating-fact-sheet-select[data-field-name]');
     }
   }
   
   if (lxSelect) {
-    // Try to get data-field-name, first from current element, then from parents
-    let fieldName = lxSelect.getAttribute('data-field-name');
-    if (!fieldName) {
-      const parent = lxSelect.closest('[data-field-name]');
-      if (parent) {
-        fieldName = parent.getAttribute('data-field-name');
-        lxSelect = parent; // Use the parent that has the field name
-      }
-    }
-    
-    console.log('[LeanIX AI] Click detected on LeanIX select, field-name:', fieldName);
+    const fieldName = lxSelect.getAttribute('data-field-name');
+    log('Click detected on LeanIX select, field-name:', fieldName);
     
     if (fieldName) {
       const fieldData = extractFieldData(lxSelect);
-      console.log('[LeanIX AI] LX Select field data:', fieldData);
+      log('LX Select field data:', fieldData);
       
-      if (fieldData && !shouldIgnoreField(fieldData.fieldName, fieldData.fieldId)) {
-        activeField = fieldData;
-        
-        console.log('[LeanIX AI] LX Select active field set:', activeField.fieldName, activeField.fieldId);
-        
-        try {
-          chrome.runtime.sendMessage({
-            action: 'activeFieldChanged',
-            field: activeField
-          });
-        } catch (e) {
-          console.log('[LeanIX AI] Could not send message to popup');
-        }
+      if (notifyActiveFieldChange(fieldData)) {
         return; // Don't continue with other click handlers
       }
     }
@@ -224,19 +220,7 @@ document.addEventListener('click', (event) => {
       const input = document.getElementById(forId);
       if (input) {
         const fieldData = extractFieldData(input, label.textContent);
-        if (fieldData && !shouldIgnoreField(fieldData.fieldName, fieldData.fieldId)) {
-          activeField = fieldData;
-          console.log('[LeanIX AI] Field detected via label click:', activeField.fieldName);
-          
-          try {
-            chrome.runtime.sendMessage({
-              action: 'activeFieldChanged',
-              field: activeField
-            });
-          } catch (e) {
-            // Popup might not be open
-          }
-        }
+        notifyActiveFieldChange(fieldData);
       }
     }
   }
@@ -244,29 +228,25 @@ document.addEventListener('click', (event) => {
 
 // Listen for messages from the popup
 chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
-  console.log('[LeanIX AI] Received message:', request);
+  log('Received message:', request.action);
   
   if (request.action === 'getPageData') {
     const pageData = extractPageData();
-    console.log('[LeanIX AI] Extracted page data:', pageData);
+    log('Extracted page data:', pageData.fields?.length, 'fields');
     sendResponse(pageData);
   } else if (request.action === 'getNameField') {
-    // Specifically get the Name field - this is the entry point
     const nameField = findNameField();
     const pageTitle = document.querySelector('h1, .page-title, [data-testid="factsheet-title"]')?.textContent?.trim() || 
                       document.title || 
                       'LeanIX Page';
-    console.log('[LeanIX AI] Returning Name field:', nameField);
-    sendResponse({ 
-      field: nameField, 
-      pageContext: pageTitle 
-    });
+    log('Returning Name field:', nameField?.currentValue);
+    sendResponse({ field: nameField, pageContext: pageTitle });
   } else if (request.action === 'getActiveField') {
-    console.log('[LeanIX AI] Returning active field:', activeField);
+    log('Returning active field:', activeField?.fieldName);
     sendResponse({ field: activeField });
   } else if (request.action === 'applyRecommendation') {
     const result = applyFieldValue(request.fieldId, request.value);
-    console.log('[LeanIX AI] Apply result:', result);
+    log('Apply result:', result.success);
     sendResponse(result);
   }
   
@@ -275,21 +255,21 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
 
 // Find the Name field on the page - searches FRESH each time
 function findNameField() {
-  console.log('[LeanIX AI] Searching for Name field...');
+  log('Searching for Name field...');
   
   // First, try to find by label text "Name" and get associated input
   const allLabels = document.querySelectorAll('label');
   for (const label of allLabels) {
-    const labelText = label.textContent?.trim().replace(/\s*\*\s*$/, '').toLowerCase(); // Remove asterisk
+    const labelText = label.textContent?.trim().replace(/\s*\*\s*$/, '').toLowerCase();
     if (labelText === 'name') {
-      console.log('[LeanIX AI] Found Name label:', label);
+      log('Found Name label');
       
       // Try 'for' attribute
       const forId = label.getAttribute('for');
       if (forId) {
         const input = document.getElementById(forId);
         if (input) {
-          console.log('[LeanIX AI] Found input by for attribute:', input.value);
+          log('Found input by for attribute:', input.value);
           return extractFieldData(input, 'Name');
         }
       }
@@ -299,7 +279,7 @@ function findNameField() {
       if (parent) {
         const input = parent.querySelector('input[type="text"], input:not([type]), textarea');
         if (input) {
-          console.log('[LeanIX AI] Found input as sibling:', input.value);
+          log('Found input as sibling:', input.value);
           return extractFieldData(input, 'Name');
         }
       }
@@ -307,16 +287,16 @@ function findNameField() {
       // Try nested input
       const nestedInput = label.querySelector('input, textarea');
       if (nestedInput) {
-        console.log('[LeanIX AI] Found nested input:', nestedInput.value);
+        log('Found nested input:', nestedInput.value);
         return extractFieldData(nestedInput, 'Name');
       }
       
       // Try next sibling element
       const nextElement = label.nextElementSibling;
       if (nextElement) {
-        const input = nextElement.matches('input, textarea') ? nextElement : nextElement.querySelector('input, textarea');
+        const input = safeMatches(nextElement, 'input, textarea') ? nextElement : nextElement.querySelector('input, textarea');
         if (input) {
-          console.log('[LeanIX AI] Found input in next sibling:', input.value);
+          log('Found input in next sibling:', input.value);
           return extractFieldData(input, 'Name');
         }
       }
@@ -339,7 +319,7 @@ function findNameField() {
       if (element) {
         const fieldData = extractFieldData(element, 'Name');
         if (fieldData) {
-          console.log('[LeanIX AI] Found Name by selector:', selector, fieldData.currentValue);
+          log('Found Name by selector:', selector, fieldData.currentValue);
           return fieldData;
         }
       }
@@ -353,12 +333,12 @@ function findNameField() {
   for (const input of allInputs) {
     const fieldData = extractFieldData(input);
     if (fieldData && fieldData.fieldName.toLowerCase() === 'name') {
-      console.log('[LeanIX AI] Found Name by input scan:', fieldData.currentValue);
+      log('Found Name by input scan:', fieldData.currentValue);
       return fieldData;
     }
   }
   
-  console.log('[LeanIX AI] Name field not found');
+  log('Name field not found');
   return null;
 }
 
@@ -423,9 +403,8 @@ function extractPageData() {
       document.querySelectorAll(selector).forEach(element => {
         const fieldData = extractFieldData(element);
         if (fieldData && !processedIds.has(fieldData.fieldId)) {
-          // Skip ignored fields
           if (shouldIgnoreField(fieldData.fieldName, fieldData.fieldId)) {
-            console.log('[LeanIX AI] Ignoring field:', fieldData.fieldName);
+            log('Ignoring field:', fieldData.fieldName);
             return;
           }
           processedIds.add(fieldData.fieldId);
@@ -433,7 +412,7 @@ function extractPageData() {
         }
       });
     } catch (e) {
-      console.warn('[LeanIX AI] Error with selector:', selector, e);
+      // Continue to next selector
     }
   });
   
@@ -445,9 +424,8 @@ function extractPageData() {
       if (input) {
         const fieldData = extractFieldData(input, label.textContent);
         if (fieldData && !processedIds.has(fieldData.fieldId)) {
-          // Skip ignored fields
           if (shouldIgnoreField(fieldData.fieldName, fieldData.fieldId)) {
-            console.log('[LeanIX AI] Ignoring field:', fieldData.fieldName);
+            log('Ignoring field:', fieldData.fieldName);
             return;
           }
           processedIds.add(fieldData.fieldId);
@@ -472,34 +450,34 @@ function extractPageData() {
 }
 
 // Extract data from a single field element
-function extractFieldData(element, labelText = '') {
+function extractFieldData(element, labelTextParam = '') {
   if (!element) return null;
   
   // Skip hidden elements
   if (element.type === 'hidden') return null;
   
   // Check for LeanIX custom select components (Angular)
-  const isLxSelect = element.matches('lx-relating-fact-sheet-select, lx-single-select, lx-fact-sheet-select');
+  const isLxSelect = safeMatches(element, LX_SELECT_SELECTORS);
   
   // Check for Tiptap/ProseMirror - look for fieldId on parent container
-  const isTiptap = element.matches('.tiptap, .ProseMirror') || element.getAttribute('contenteditable') === 'true';
+  const isTiptap = safeMatches(element, '.tiptap, .ProseMirror') || element.getAttribute?.('contenteditable') === 'true';
   
-  let fieldId = element.getAttribute('data-field-id') ||
-                element.getAttribute('data-field-name') ||
-                element.getAttribute('name') ||
-                element.getAttribute('id') ||
-                element.getAttribute('data-testid') ||
+  let fieldId = element.getAttribute?.('data-field-id') ||
+                element.getAttribute?.('data-field-name') ||
+                element.getAttribute?.('name') ||
+                element.getAttribute?.('id') ||
+                element.getAttribute?.('data-testid') ||
                 '';
   
   // For LeanIX custom selects, extract from data-field-name
   if (isLxSelect && !fieldId) {
-    fieldId = element.getAttribute('data-field-name') || '';
-    console.log('[LeanIX AI] LX Select field detected:', fieldId);
+    fieldId = element.getAttribute?.('data-field-name') || '';
+    log('LX Select field detected:', fieldId);
   }
   
   // For Tiptap editors, try to find fieldId from parent elements
   if (!fieldId && isTiptap) {
-    const parent = element.closest('[data-field-id], [data-field-name], [class*="description" i]');
+    const parent = element.closest('[data-field-id], [data-field-name]');
     if (parent) {
       fieldId = parent.getAttribute('data-field-id') ||
                 parent.getAttribute('data-field-name') ||
@@ -507,25 +485,24 @@ function extractFieldData(element, labelText = '') {
                 '';
       
       // Check if parent class contains "description"
-      if (!fieldId && parent.className.toLowerCase().includes('description')) {
+      if (!fieldId && parent.className?.toLowerCase?.().includes('description')) {
         fieldId = 'description';
       }
     }
     
     // Only use description as fallback if we can confirm it's actually a description field
-    // by checking for nearby labels or specific class patterns
     if (!fieldId) {
-      const container = element.closest('[class*="field"], .form-group, .field-container');
+      const container = element.closest('.form-group, .field-container');
       if (container) {
-        const label = container.querySelector('label, .label, [class*="label"]');
-        const labelText = label?.textContent?.toLowerCase()?.trim() || '';
-        if (labelText.includes('description')) {
+        const labelEl = container.querySelector('label, .label');
+        const foundLabelText = labelEl?.textContent?.toLowerCase()?.trim() || '';
+        if (foundLabelText.includes('description')) {
           fieldId = 'description';
         }
       }
     }
     
-    // If still no fieldId, skip this element - don't default to description
+    // If still no fieldId, skip this element
     if (!fieldId) {
       return null;
     }
@@ -533,10 +510,10 @@ function extractFieldData(element, labelText = '') {
   
   if (!fieldId) return null;
   
-  // Get field name from fieldId (convert camelCase/kebab to readable name)
-  let fieldName = labelText?.trim() || '';
+  // Get field name from labelText parameter or find from DOM
+  let fieldName = labelTextParam?.trim() || '';
   
-  if (!fieldName) {
+  if (!fieldName && element.id) {
     const label = document.querySelector(`label[for="${element.id}"]`);
     if (label) fieldName = label.textContent?.trim() || '';
   }
@@ -551,37 +528,36 @@ function extractFieldData(element, labelText = '') {
       .trim();
   }
   
-  if (!fieldName) {
-    // For Tiptap, look for nearby labels
-    if (isTiptap) {
-      const container = element.closest('[data-field-id], [data-field-name], .field-container, [class*="field"]');
-      if (container) {
-        const label = container.querySelector('label, .label, [class*="label"]');
-        if (label) fieldName = label.textContent?.trim() || '';
-      }
+  // For Tiptap, look for nearby labels
+  if (!fieldName && isTiptap) {
+    const container = element.closest('[data-field-id], [data-field-name], .field-container');
+    if (container) {
+      const label = container.querySelector('label, .label');
+      if (label) fieldName = label.textContent?.trim() || '';
     }
   }
   
   if (!fieldName) {
-    fieldName = element.getAttribute('aria-label') ||
-                element.getAttribute('placeholder') ||
-                element.getAttribute('title') ||
+    fieldName = element.getAttribute?.('aria-label') ||
+                element.getAttribute?.('placeholder') ||
+                element.getAttribute?.('title') ||
                 fieldId.replace(/[-_]/g, ' ').replace(/([A-Z])/g, ' $1').trim();
   }
   
   // Capitalize each word
   fieldName = fieldName.split(' ')
+    .filter(word => word.length > 0)
     .map(word => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase())
     .join(' ');
   
   // Get current value - handle different element types
   let currentValue = '';
   const isSelect = element.tagName === 'SELECT';
-  const isCustomSelect = element.matches('[role="combobox"], [role="listbox"], [data-select]') || 
-                         element.hasAttribute('aria-haspopup');
+  const isCustomSelect = safeMatches(element, '[role="combobox"], [role="listbox"], [data-select]') || 
+                         element.hasAttribute?.('aria-haspopup');
   
   if (isLxSelect) {
-    // For LeanIX custom selects, get value from .selection div or selected option's aria-label
+    // For LeanIX custom selects, get value from .selection div or selected option
     const selectionDiv = element.querySelector('.selection');
     const selectedOption = element.querySelector('li.keyboardSelectable[aria-selected="true"], li.selected');
     
@@ -589,25 +565,17 @@ function extractFieldData(element, labelText = '') {
       currentValue = selectionDiv.textContent.trim();
     } else if (selectedOption) {
       currentValue = selectedOption.getAttribute('aria-label') || selectedOption.textContent?.trim() || '';
-    } else {
-      // Check for currently highlighted/focused option
-      const focusedOption = element.querySelector('.factSheetName');
-      if (focusedOption) {
-        currentValue = focusedOption.textContent?.trim() || '';
-      }
     }
-    console.log('[LeanIX AI] LX Select current value:', currentValue);
+    log('LX Select current value:', currentValue);
   } else if (isSelect) {
     const selectedOption = element.options?.[element.selectedIndex];
     currentValue = selectedOption ? selectedOption.text : '';
   } else if (isCustomSelect) {
-    // For custom dropdowns, try to get the displayed value
-    currentValue = element.getAttribute('aria-valuenow') ||
-                   element.getAttribute('data-value') ||
-                   element.querySelector('[class*="value" i], [class*="selected" i], [class*="placeholder" i]')?.textContent ||
-                   element.textContent?.trim() || '';
-  } else if (isTiptap || element.getAttribute('contenteditable') === 'true') {
-    // For Tiptap, get text content
+    currentValue = element.getAttribute?.('aria-valuenow') ||
+                   element.getAttribute?.('data-value') ||
+                   element.querySelector('[class*="value"], [class*="selected"]')?.textContent ||
+                   '';
+  } else if (isTiptap || element.getAttribute?.('contenteditable') === 'true') {
     currentValue = element.textContent || element.innerText || '';
   } else {
     currentValue = element.value || '';
@@ -617,19 +585,18 @@ function extractFieldData(element, labelText = '') {
     fieldId,
     fieldName,
     currentValue: currentValue.trim(),
-    isTiptap: isTiptap,
+    isTiptap,
     isSelect: isSelect || isCustomSelect || isLxSelect,
-    isLxSelect: isLxSelect
+    isLxSelect
   };
 }
 
 // Apply a value to a field on the page
 function applyFieldValue(fieldId, value) {
-  console.log('[LeanIX AI] Applying value:', fieldId, '=', value);
+  log('Applying value:', fieldId, '=', value);
   
   // Try multiple selectors to find the field
   const selectors = [
-    // LeanIX custom select first
     `lx-relating-fact-sheet-select[data-field-name="${fieldId}"]`,
     `[data-field-id="${fieldId}"]`,
     `[data-field-name="${fieldId}"]`,
@@ -643,9 +610,9 @@ function applyFieldValue(fieldId, value) {
     try {
       element = document.querySelector(selector);
       if (element) {
-        console.log('[LeanIX AI] Found element with selector:', selector);
+        log('Found element with selector:', selector);
         // If the element is not an input, try to find input inside (but keep lx-select as is)
-        if (!element.matches('input, textarea, select, [contenteditable="true"], [role="combobox"], [role="listbox"], lx-relating-fact-sheet-select, lx-single-select, lx-fact-sheet-select')) {
+        if (!safeMatches(element, 'input, textarea, select, [contenteditable="true"], [role="combobox"], [role="listbox"], ' + LX_SELECT_SELECTORS)) {
           const input = element.querySelector('input, textarea, select, [contenteditable="true"], [role="combobox"], [role="listbox"]');
           if (input) element = input;
         }
@@ -662,60 +629,53 @@ function applyFieldValue(fieldId, value) {
   }
   
   try {
-    // Check if this is a LeanIX custom select
-    const isLxSelect = element.matches('lx-relating-fact-sheet-select, lx-single-select, lx-fact-sheet-select');
-    const isCustomSelect = element.matches('[role="combobox"], [role="listbox"], [data-select]') || 
-                           element.hasAttribute('aria-haspopup');
+    const isLxSelect = safeMatches(element, LX_SELECT_SELECTORS);
+    const isCustomSelect = safeMatches(element, '[role="combobox"], [role="listbox"], [data-select]') || 
+                           element.hasAttribute?.('aria-haspopup');
     
     if (isLxSelect) {
-      // Handle LeanIX Angular select components
-      console.log('[LeanIX AI] Handling LeanIX select element');
+      log('Handling LeanIX select element');
       
       // Click on the selectContainer to open dropdown
       const selectContainer = element.querySelector('.selectContainer');
       if (selectContainer) {
         selectContainer.click();
-        console.log('[LeanIX AI] Clicked selectContainer to open dropdown');
+        log('Clicked selectContainer to open dropdown');
       }
       
       // Wait for dropdown to open, then type in search input and select option
       setTimeout(() => {
-        // Find and fill the search input
         const queryInput = element.querySelector('.queryInput, input[type="text"]');
         if (queryInput) {
           queryInput.focus();
           queryInput.value = value;
           queryInput.dispatchEvent(new Event('input', { bubbles: true }));
-          console.log('[LeanIX AI] Typed search value:', value);
+          log('Typed search value:', value);
         }
         
         // Wait for search results, then click matching option
         setTimeout(() => {
-          // Find options in the dropdown (li elements with aria-label)
           const options = element.querySelectorAll('li[aria-label], li.keyboardSelectable, .option');
-          console.log('[LeanIX AI] Found options:', options.length);
+          log('Found options:', options.length);
           
           let matched = false;
           for (const option of options) {
             const optionLabel = option.getAttribute('aria-label') || option.textContent?.trim();
-            console.log('[LeanIX AI] Checking option:', optionLabel);
             
-            // Check for exact match or contains match
             if (optionLabel?.toLowerCase() === value.toLowerCase() || 
                 optionLabel?.toLowerCase().includes(value.toLowerCase())) {
               option.click();
-              console.log('[LeanIX AI] Clicked matching option:', optionLabel);
+              log('Clicked matching option:', optionLabel);
               matched = true;
               break;
             }
           }
           
           if (!matched) {
-            // Try clicking the first option if no exact match
             const firstOption = element.querySelector('li.keyboardSelectable, li[aria-label], .option');
             if (firstOption) {
               firstOption.click();
-              console.log('[LeanIX AI] Clicked first available option');
+              log('Clicked first available option');
             }
           }
         }, 300);
@@ -738,45 +698,31 @@ function applyFieldValue(fieldId, value) {
       // Trigger change event for select
       element.dispatchEvent(new Event('change', { bubbles: true, cancelable: true }));
     } else if (isCustomSelect) {
-      // For custom dropdowns, try to click and select the matching option
-      console.log('[LeanIX AI] Handling custom select element');
-      element.click(); // Open the dropdown
+      log('Handling custom select element');
+      element.click();
       
-      // Wait briefly for dropdown to open, then find and click the matching option
       setTimeout(() => {
-        const options = document.querySelectorAll('[role="option"], [class*="option" i], [class*="menu-item" i], [class*="list-item" i]');
+        const options = document.querySelectorAll('[role="option"]');
         for (const option of options) {
           const optionText = option.textContent?.trim().toLowerCase();
           if (optionText === value.toLowerCase() || optionText?.includes(value.toLowerCase())) {
             option.click();
-            console.log('[LeanIX AI] Clicked matching option:', optionText);
+            log('Clicked matching option:', optionText);
             break;
           }
         }
       }, 100);
-    } else if (element.getAttribute('contenteditable') === 'true') {
-      // Handle Tiptap/ProseMirror editors
+    } else if (element.getAttribute?.('contenteditable') === 'true') {
       element.focus();
       
-      // Select all existing content and delete it
       const selection = window.getSelection();
       const range = document.createRange();
       range.selectNodeContents(element);
       selection.removeAllRanges();
       selection.addRange(range);
       
-      // Use execCommand to insert text (works with Tiptap)
       document.execCommand('insertHTML', false, `<p>${value}</p>`);
       
-      // Also dispatch beforeinput for modern editors
-      element.dispatchEvent(new InputEvent('beforeinput', {
-        bubbles: true,
-        cancelable: true,
-        inputType: 'insertText',
-        data: value
-      }));
-      
-      // Dispatch input event for Tiptap
       element.dispatchEvent(new InputEvent('input', { 
         bubbles: true, 
         cancelable: true,
@@ -784,7 +730,6 @@ function applyFieldValue(fieldId, value) {
         data: value
       }));
     } else {
-      // Clear and set value
       element.focus();
       element.value = value;
     }
@@ -803,16 +748,7 @@ function applyFieldValue(fieldId, value) {
       element.dispatchEvent(new Event('input', { bubbles: true }));
     }
     
-    // For contenteditable/Tiptap - also try native setter approach
-    const nativeTextContentSetter = Object.getOwnPropertyDescriptor(
-      window.HTMLElement.prototype, 'textContent'
-    )?.set;
-    if (nativeTextContentSetter && element.getAttribute('contenteditable') === 'true') {
-      nativeTextContentSetter.call(element, value);
-      element.dispatchEvent(new Event('input', { bubbles: true }));
-    }
-    
-    console.log('[LeanIX AI] Successfully applied value to:', fieldId);
+    log('Successfully applied value to:', fieldId);
     return { success: true };
   } catch (error) {
     console.error('[LeanIX AI] Error applying value:', error);
