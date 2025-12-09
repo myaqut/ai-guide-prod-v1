@@ -125,10 +125,14 @@ function findEditableElement(element) {
 // Listen for focus events on input fields
 document.addEventListener('focusin', (event) => {
   const element = event.target;
+  console.log('[LeanIX AI] Focusin event on:', element.tagName, element.className);
+  
   const targetElement = findEditableElement(element);
   
   if (targetElement && isEditableElement(targetElement)) {
     const fieldData = extractFieldData(targetElement);
+    console.log('[LeanIX AI] Extracted field data:', fieldData);
+    
     if (fieldData && !shouldIgnoreField(fieldData.fieldName, fieldData.fieldId)) {
       activeField = fieldData;
       
@@ -147,7 +151,61 @@ document.addEventListener('focusin', (event) => {
   }
 }, true);
 
-// Also listen for click events to catch clicks on field labels/containers
+// Listen for click events specifically for LeanIX custom select components
+document.addEventListener('click', (event) => {
+  const element = event.target;
+  
+  // Check if clicked inside a LeanIX select component
+  const lxSelect = element.closest('lx-relating-fact-sheet-select, lx-single-select, lx-fact-sheet-select');
+  
+  if (lxSelect) {
+    console.log('[LeanIX AI] Click detected on LeanIX select:', lxSelect.getAttribute('data-field-name'));
+    
+    const fieldData = extractFieldData(lxSelect);
+    console.log('[LeanIX AI] LX Select field data:', fieldData);
+    
+    if (fieldData && !shouldIgnoreField(fieldData.fieldName, fieldData.fieldId)) {
+      activeField = fieldData;
+      
+      console.log('[LeanIX AI] LX Select active field set:', activeField.fieldName, activeField.fieldId);
+      
+      try {
+        chrome.runtime.sendMessage({
+          action: 'activeFieldChanged',
+          field: activeField
+        });
+      } catch (e) {
+        console.log('[LeanIX AI] Could not send message to popup');
+      }
+      return; // Don't continue with other click handlers
+    }
+  }
+  
+  // Also check for selectContainer clicks (LeanIX dropdowns)
+  const selectContainer = element.closest('.selectContainer');
+  if (selectContainer) {
+    const parentLxSelect = selectContainer.closest('lx-relating-fact-sheet-select, lx-single-select');
+    if (parentLxSelect) {
+      console.log('[LeanIX AI] Click on selectContainer, parent LX select:', parentLxSelect.getAttribute('data-field-name'));
+      
+      const fieldData = extractFieldData(parentLxSelect);
+      if (fieldData && !shouldIgnoreField(fieldData.fieldName, fieldData.fieldId)) {
+        activeField = fieldData;
+        
+        try {
+          chrome.runtime.sendMessage({
+            action: 'activeFieldChanged',
+            field: activeField
+          });
+        } catch (e) {
+          console.log('[LeanIX AI] Could not send message to popup');
+        }
+        return;
+      }
+    }
+  }
+  
+  // Existing label click handling
 document.addEventListener('click', (event) => {
   const element = event.target;
   
