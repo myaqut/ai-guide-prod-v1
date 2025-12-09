@@ -182,9 +182,15 @@ export const FieldCard = ({
           )}
 
           {expanded && reasoning && !isEditing && (
-            <p className="text-xs text-muted-foreground bg-muted/30 rounded p-2 mb-2 animate-fade-in">
-              {reasoning}
-            </p>
+            <p 
+              className="text-xs text-muted-foreground bg-muted/30 rounded p-2 mb-2 animate-fade-in [&_a]:text-primary [&_a]:underline [&_a]:hover:text-primary/80"
+              dangerouslySetInnerHTML={{
+                __html: reasoning.replace(
+                  /(https?:\/\/[^\s<]+)/g,
+                  '<a href="$1" target="_blank" rel="noopener noreferrer">$1</a>'
+                )
+              }}
+            />
           )}
 
           {/* No recommendation message */}
