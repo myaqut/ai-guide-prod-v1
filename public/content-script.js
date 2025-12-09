@@ -205,10 +205,6 @@ document.addEventListener('click', (event) => {
     }
   }
   
-  // Existing label click handling
-document.addEventListener('click', (event) => {
-  const element = event.target;
-  
   // Check if clicked on a label or field container
   const label = element.closest('label');
   if (label) {
