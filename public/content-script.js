@@ -29,13 +29,29 @@ function shouldIgnoreField(fieldName, fieldId) {
   );
 }
 
-// Check if element is an editable field (including Tiptap/ProseMirror)
+// Check if element is an editable field (including Tiptap/ProseMirror and custom dropdowns)
 function isEditableElement(element) {
   if (!element) return false;
-  return element.matches('input, textarea, select, [contenteditable="true"], .tiptap, .ProseMirror');
+  
+  // Standard form elements and contenteditable
+  if (element.matches('input, textarea, select, [contenteditable="true"], .tiptap, .ProseMirror')) {
+    return true;
+  }
+  
+  // Custom dropdown/select components (common patterns)
+  if (element.matches('[role="combobox"], [role="listbox"], [role="option"], [data-select], [class*="select" i], [class*="dropdown" i], [class*="picker" i]')) {
+    return true;
+  }
+  
+  // Check for aria attributes indicating a select-like element
+  if (element.hasAttribute('aria-haspopup') || element.hasAttribute('aria-expanded')) {
+    return true;
+  }
+  
+  return false;
 }
 
-// Find the editable element from a target (handles Tiptap containers)
+// Find the editable element from a target (handles Tiptap containers and custom dropdowns)
 function findEditableElement(element) {
   if (!element) return null;
   
@@ -48,9 +64,13 @@ function findEditableElement(element) {
   const tiptap = element.querySelector('.tiptap, .ProseMirror, [contenteditable="true"]');
   if (tiptap) return tiptap;
   
-  // Check for regular inputs
+  // Check for regular inputs including selects
   const input = element.querySelector('input, textarea, select');
   if (input) return input;
+  
+  // Check for custom dropdown/select components
+  const customSelect = element.querySelector('[role="combobox"], [role="listbox"], [data-select], [class*="select" i]:not(style):not(script), [class*="dropdown" i]:not(style):not(script)');
+  if (customSelect) return customSelect;
   
   // Check parent elements for field containers
   const parentField = element.closest('[data-field-id], [data-field-name], .field-container, [class*="field"]');
@@ -60,6 +80,9 @@ function findEditableElement(element) {
     
     const nestedInput = parentField.querySelector('input, textarea, select');
     if (nestedInput) return nestedInput;
+    
+    const nestedCustomSelect = parentField.querySelector('[role="combobox"], [role="listbox"], [data-select]');
+    if (nestedCustomSelect) return nestedCustomSelect;
   }
   
   return null;
@@ -249,7 +272,7 @@ function extractPageData() {
   const fields = [];
   const processedIds = new Set();
   
-  // Common LeanIX field selectors - including provider
+  // Common LeanIX field selectors - including provider and select/dropdown fields
   const fieldSelectors = [
     // Tiptap/ProseMirror editors (for description fields)
     '.tiptap',
@@ -259,16 +282,25 @@ function extractPageData() {
     'input[data-field-id]',
     'textarea[data-field-id]',
     'select[data-field-id]',
+    // Custom dropdown/select components
+    '[role="combobox"]',
+    '[role="listbox"]',
+    '[data-select]',
     // LeanIX specific selectors
     '[data-testid*="field"]',
     '[class*="field-input"]',
     '[class*="FieldInput"]',
+    // Select/dropdown patterns
+    '[class*="select" i][data-field-id]',
+    '[class*="dropdown" i][data-field-id]',
+    '[class*="picker" i][data-field-id]',
     // Provider field specific selectors
     '[data-field-id="provider"]',
     '[data-field-name="provider"]',
     '[name="provider"]',
     'input[placeholder*="provider" i]',
     '[class*="provider" i] input',
+    '[class*="provider" i] select',
     // Name field
     '[data-field-id="name"]',
     '[name="name"]',
@@ -279,6 +311,8 @@ function extractPageData() {
     'input[name]',
     'textarea[name]',
     'select[name]',
+    // Native select elements
+    'select',
   ];
   
   fieldSelectors.forEach(selector => {
@@ -418,11 +452,21 @@ function extractFieldData(element, labelText = '') {
     .map(word => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase())
     .join(' ');
   
-  // Get current value
+  // Get current value - handle different element types
   let currentValue = '';
-  if (element.tagName === 'SELECT') {
+  const isSelect = element.tagName === 'SELECT';
+  const isCustomSelect = element.matches('[role="combobox"], [role="listbox"], [data-select]') || 
+                         element.hasAttribute('aria-haspopup');
+  
+  if (isSelect) {
     const selectedOption = element.options?.[element.selectedIndex];
     currentValue = selectedOption ? selectedOption.text : '';
+  } else if (isCustomSelect) {
+    // For custom dropdowns, try to get the displayed value
+    currentValue = element.getAttribute('aria-valuenow') ||
+                   element.getAttribute('data-value') ||
+                   element.querySelector('[class*="value" i], [class*="selected" i], [class*="placeholder" i]')?.textContent ||
+                   element.textContent?.trim() || '';
   } else if (isTiptap || element.getAttribute('contenteditable') === 'true') {
     // For Tiptap, get text content
     currentValue = element.textContent || element.innerText || '';
@@ -434,7 +478,8 @@ function extractFieldData(element, labelText = '') {
     fieldId,
     fieldName,
     currentValue: currentValue.trim(),
-    isTiptap: isTiptap
+    isTiptap: isTiptap,
+    isSelect: isSelect || isCustomSelect
   };
 }
 
@@ -457,8 +502,8 @@ function applyFieldValue(fieldId, value) {
       element = document.querySelector(selector);
       if (element) {
         // If the element is not an input, try to find input inside
-        if (!element.matches('input, textarea, select, [contenteditable="true"]')) {
-          const input = element.querySelector('input, textarea, select, [contenteditable="true"]');
+        if (!element.matches('input, textarea, select, [contenteditable="true"], [role="combobox"], [role="listbox"]')) {
+          const input = element.querySelector('input, textarea, select, [contenteditable="true"], [role="combobox"], [role="listbox"]');
           if (input) element = input;
         }
         break;
@@ -475,6 +520,9 @@ function applyFieldValue(fieldId, value) {
   
   try {
     // Handle different element types
+    const isCustomSelect = element.matches('[role="combobox"], [role="listbox"], [data-select]') || 
+                           element.hasAttribute('aria-haspopup');
+    
     if (element.tagName === 'SELECT') {
       const options = Array.from(element.options);
       const matchingOption = options.find(opt => 
@@ -484,9 +532,29 @@ function applyFieldValue(fieldId, value) {
       );
       if (matchingOption) {
         element.value = matchingOption.value;
+        element.selectedIndex = matchingOption.index;
       } else {
         element.value = value;
       }
+      // Trigger change event for select
+      element.dispatchEvent(new Event('change', { bubbles: true, cancelable: true }));
+    } else if (isCustomSelect) {
+      // For custom dropdowns, try to click and select the matching option
+      console.log('[LeanIX AI] Handling custom select element');
+      element.click(); // Open the dropdown
+      
+      // Wait briefly for dropdown to open, then find and click the matching option
+      setTimeout(() => {
+        const options = document.querySelectorAll('[role="option"], [class*="option" i], [class*="menu-item" i], [class*="list-item" i]');
+        for (const option of options) {
+          const optionText = option.textContent?.trim().toLowerCase();
+          if (optionText === value.toLowerCase() || optionText?.includes(value.toLowerCase())) {
+            option.click();
+            console.log('[LeanIX AI] Clicked matching option:', optionText);
+            break;
+          }
+        }
+      }, 100);
     } else if (element.getAttribute('contenteditable') === 'true') {
       // Handle Tiptap/ProseMirror editors
       element.focus();
