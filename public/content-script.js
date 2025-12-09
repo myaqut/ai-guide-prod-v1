@@ -353,7 +353,7 @@ function extractFieldData(element, labelText = '') {
   
   // For Tiptap editors, try to find fieldId from parent elements
   if (!fieldId && isTiptap) {
-    const parent = element.closest('[data-field-id], [data-field-name], [class*="description" i], [class*="field"]');
+    const parent = element.closest('[data-field-id], [data-field-name], [class*="description" i]');
     if (parent) {
       fieldId = parent.getAttribute('data-field-id') ||
                 parent.getAttribute('data-field-name') ||
@@ -366,9 +366,22 @@ function extractFieldData(element, labelText = '') {
       }
     }
     
-    // Fallback: assume it's the description field if it's a rich text editor
+    // Only use description as fallback if we can confirm it's actually a description field
+    // by checking for nearby labels or specific class patterns
     if (!fieldId) {
-      fieldId = 'description';
+      const container = element.closest('[class*="field"], .form-group, .field-container');
+      if (container) {
+        const label = container.querySelector('label, .label, [class*="label"]');
+        const labelText = label?.textContent?.toLowerCase()?.trim() || '';
+        if (labelText.includes('description')) {
+          fieldId = 'description';
+        }
+      }
+    }
+    
+    // If still no fieldId, skip this element - don't default to description
+    if (!fieldId) {
+      return null;
     }
   }
   
