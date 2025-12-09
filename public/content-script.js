@@ -155,42 +155,53 @@ document.addEventListener('focusin', (event) => {
 document.addEventListener('click', (event) => {
   const element = event.target;
   
-  // Check if clicked inside a LeanIX select component
-  const lxSelect = element.closest('lx-relating-fact-sheet-select, lx-single-select, lx-fact-sheet-select');
+  console.log('[LeanIX AI] Click on element:', element.tagName, element.className?.substring?.(0, 50));
   
-  if (lxSelect) {
-    console.log('[LeanIX AI] Click detected on LeanIX select:', lxSelect.getAttribute('data-field-name'));
-    
-    const fieldData = extractFieldData(lxSelect);
-    console.log('[LeanIX AI] LX Select field data:', fieldData);
-    
-    if (fieldData && !shouldIgnoreField(fieldData.fieldName, fieldData.fieldId)) {
-      activeField = fieldData;
-      
-      console.log('[LeanIX AI] LX Select active field set:', activeField.fieldName, activeField.fieldId);
-      
-      try {
-        chrome.runtime.sendMessage({
-          action: 'activeFieldChanged',
-          field: activeField
-        });
-      } catch (e) {
-        console.log('[LeanIX AI] Could not send message to popup');
+  // Check if clicked inside a LeanIX select component - find the outermost lx-relating-fact-sheet-select
+  let lxSelect = element.closest('lx-relating-fact-sheet-select');
+  
+  // If not found directly, check if we're inside lx-single-select or lx-fact-sheet-select
+  if (!lxSelect) {
+    const innerSelect = element.closest('lx-single-select, lx-fact-sheet-select');
+    if (innerSelect) {
+      // Look for parent lx-relating-fact-sheet-select
+      lxSelect = innerSelect.closest('lx-relating-fact-sheet-select');
+      if (!lxSelect) {
+        // Use the inner select if no parent found
+        lxSelect = innerSelect;
       }
-      return; // Don't continue with other click handlers
     }
   }
   
-  // Also check for selectContainer clicks (LeanIX dropdowns)
-  const selectContainer = element.closest('.selectContainer');
-  if (selectContainer) {
-    const parentLxSelect = selectContainer.closest('lx-relating-fact-sheet-select, lx-single-select');
-    if (parentLxSelect) {
-      console.log('[LeanIX AI] Click on selectContainer, parent LX select:', parentLxSelect.getAttribute('data-field-name'));
+  // Also check for selectContainer clicks
+  if (!lxSelect) {
+    const selectContainer = element.closest('.selectContainer, .selectionContainer, .inputContainer');
+    if (selectContainer) {
+      lxSelect = selectContainer.closest('lx-relating-fact-sheet-select, lx-single-select, lx-fact-sheet-select');
+    }
+  }
+  
+  if (lxSelect) {
+    // Try to get data-field-name, first from current element, then from parents
+    let fieldName = lxSelect.getAttribute('data-field-name');
+    if (!fieldName) {
+      const parent = lxSelect.closest('[data-field-name]');
+      if (parent) {
+        fieldName = parent.getAttribute('data-field-name');
+        lxSelect = parent; // Use the parent that has the field name
+      }
+    }
+    
+    console.log('[LeanIX AI] Click detected on LeanIX select, field-name:', fieldName);
+    
+    if (fieldName) {
+      const fieldData = extractFieldData(lxSelect);
+      console.log('[LeanIX AI] LX Select field data:', fieldData);
       
-      const fieldData = extractFieldData(parentLxSelect);
       if (fieldData && !shouldIgnoreField(fieldData.fieldName, fieldData.fieldId)) {
         activeField = fieldData;
+        
+        console.log('[LeanIX AI] LX Select active field set:', activeField.fieldName, activeField.fieldId);
         
         try {
           chrome.runtime.sendMessage({
@@ -200,7 +211,7 @@ document.addEventListener('click', (event) => {
         } catch (e) {
           console.log('[LeanIX AI] Could not send message to popup');
         }
-        return;
+        return; // Don't continue with other click handlers
       }
     }
   }
