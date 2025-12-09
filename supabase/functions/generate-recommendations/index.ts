@@ -110,9 +110,11 @@ function buildFieldSearchQuery(componentName: string, fieldName: string): string
     return `"${componentName}" end of life end of support date official from official vendor website YYYY-MM-DD`;
   }
   
-  // Description field - emphasize official sources
+  // Description field - general product description (not version-specific)
   if (lowerFieldName.includes('description')) {
-    return `"${componentName}" product description features overview from official website`;
+    // Extract base product name without version for general description
+    const baseProductName = componentName.replace(/\s+\d+[\d.]*\s*$/, '').replace(/\s+v?\d+[\d.]*\s*$/i, '').trim();
+    return `"${baseProductName}" product description what is ${baseProductName} features overview official website`;
   }
   
   // Provider/Vendor field
@@ -526,8 +528,10 @@ FOR URL FIELDS (Active URL, End of Sale Date URL, End of Standard Support URL, e
 
 FOR DESCRIPTION FIELDS:
 - CRITICAL: Keep the description to MAXIMUM 250 characters
-- Use the search results to write a concise, accurate description
-- Include only the most essential features and purpose of the component
+- Write a GENERAL description of the product/component, NOT version-specific features
+- Describe what the product IS and what it DOES in general terms
+- Do NOT mention specific version numbers or version-specific release notes
+- Focus on the core purpose, main capabilities, and use cases of the product
 
 FOR PROVIDER/VENDOR FIELDS:
 - Extract the vendor name from search results
