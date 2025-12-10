@@ -14,11 +14,8 @@ const Index = () => {
         {/* Title section */}
         <div className="text-center space-y-3 max-w-md">
           <h1 className="text-3xl font-bold text-white">
-            Catalog <span className="text-primary">AI</span> Assistant
+            Researcher <span className="text-primary">AI</span> Assistant
           </h1>
-          <p className="text-sm text-slate-400">
-            Chrome extension popup preview. This is how the extension appears when activated on a LeanIX catalog page.
-          </p>
         </div>
 
         {/* Extension popup preview */}
