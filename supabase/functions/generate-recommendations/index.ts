@@ -122,6 +122,13 @@ function buildFieldSearchQuery(componentName: string, fieldName: string, vendorD
     return `"${baseProductName}" product description what is ${baseProductName} features overview official website`;
   }
   
+  // Component Website field - main product homepage (not version-specific)
+  if (lowerFieldName.includes('component website') || lowerFieldName.includes('website') || lowerFieldName.includes('homepage')) {
+    // Extract base product name without version for main website
+    const baseProductName = componentName.replace(/\s+\d+[\d.]*\s*$/, '').replace(/\s+v?\d+[\d.]*\s*$/i, '').trim();
+    return `"${baseProductName}" official website homepage main product page`;
+  }
+  
   // Provider/Vendor field
   if (lowerFieldName.includes('provider') || lowerFieldName.includes('vendor')) {
     return `"${componentName}" official vendor company manufacturer developer`;
@@ -513,7 +520,9 @@ serve(async (req) => {
         const needsSearch = isLifecycleField(field.fieldName) || 
                            field.fieldName.toLowerCase().includes('description') ||
                            field.fieldName.toLowerCase().includes('provider') ||
-                           field.fieldName.toLowerCase().includes('category');
+                           field.fieldName.toLowerCase().includes('category') ||
+                           field.fieldName.toLowerCase().includes('website') ||
+                           field.fieldName.toLowerCase().includes('homepage');
         
         console.log(`Field "${field.fieldName}" - isLifecycleField: ${isLifecycleField(field.fieldName)}, needsSearch: ${needsSearch}, cacheKey: ${cacheKey}`);
         
@@ -627,6 +636,11 @@ FOR PROVIDER/VENDOR FIELDS:
 
 FOR CATEGORY FIELDS:
 - Determine the software category (Database, Application Server, Framework, etc.)
+
+FOR COMPONENT WEBSITE FIELDS:
+- Provide the MAIN product homepage URL (not version-specific pages)
+- Use the official vendor website URL for the product (e.g., https://www.liquibase.com not https://www.liquibase.com/downloads/liquibase-4-29-0)
+- This should be the general product landing page, NOT a specific version download or release page
 
 Respond with a JSON array of recommendations. Each recommendation must have:
 - fieldId: the original field ID
