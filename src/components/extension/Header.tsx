@@ -1,5 +1,6 @@
-import { Sparkles, Settings, Zap, RotateCcw } from "lucide-react";
+import { Settings, Zap, RotateCcw } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import extensionLogo from "@/assets/extension-logo.png";
 
 interface HeaderProps {
   onSettingsClick: () => void;
@@ -12,9 +13,7 @@ export const Header = ({ onSettingsClick, onStartOver, isConnected }: HeaderProp
     <header className="flex items-center justify-between px-4 py-3 border-b border-border bg-card">
       <div className="flex items-center gap-2">
         <div className="relative">
-          <div className="w-8 h-8 rounded-lg bg-primary/20 flex items-center justify-center">
-            <Sparkles className="w-4 h-4 text-primary" />
-          </div>
+          <img src={extensionLogo} alt="Researcher AI Assistant" className="w-8 h-8 rounded-lg" />
           {isConnected && (
             <div className="absolute -bottom-0.5 -right-0.5 w-2.5 h-2.5 rounded-full bg-emerald-500 border-2 border-card" />
           )}
