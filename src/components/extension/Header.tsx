@@ -19,8 +19,8 @@ export const Header = ({ onSettingsClick, onStartOver, isConnected }: HeaderProp
           )}
         </div>
         <div>
-          <h1 className="text-sm font-semibold text-slate-800">Catalog AI</h1>
-          <p className="text-[10px] text-slate-500">Smart Field Assistant</p>
+          <h1 className="text-sm font-semibold text-slate-800">Researcher</h1>
+          <p className="text-[10px] text-slate-500">AI Assistant</p>
         </div>
       </div>
       
