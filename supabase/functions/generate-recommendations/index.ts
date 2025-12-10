@@ -546,17 +546,21 @@ serve(async (req) => {
         if (urlCacheKey) {
           const cachedUrls = dateFieldUrlCache[urlCacheKey];
           if (cachedUrls && cachedUrls.length > 0) {
-            // Use the first official URL from the date field search
+            // Use the first official URL from the date field search - this MUST be the exact same URL
             const officialUrl = cachedUrls[0];
             console.log(`Using cached URL for ${field.fieldName} from ${urlCacheKey}: ${officialUrl}`);
             searchResults[field.fieldId] = {
-              content: `Official source URL from corresponding date field search: ${officialUrl}`,
-              urls: cachedUrls
+              content: `MANDATORY URL FOR THIS FIELD: ${officialUrl}
+              
+This is the EXACT official source URL that was used to find the corresponding date. 
+You MUST recommend this exact URL: ${officialUrl}
+Do NOT recommend any other URL. The recommendation field value must be exactly: ${officialUrl}`,
+              urls: [officialUrl] // Only pass the single URL to avoid confusion
             };
           } else {
             console.log(`No cached URL found for ${field.fieldName} (cache key: ${urlCacheKey})`);
             searchResults[field.fieldId] = {
-              content: 'No official URL was found during the date field search. The corresponding date field did not return any official source URLs.',
+              content: 'No official URL was found during the date field search. The corresponding date field did not return any official source URLs. Recommend null or empty value.',
               urls: []
             };
           }
@@ -616,12 +620,13 @@ FOR DATE FIELDS (Active Date, End of Sale Date, End of Standard Support, etc.):
   * If the search results show multiple version dates, pick the one matching the EXACT version in the component name
   * If the exact version date is not found, set confidence to 0.5 and explain which versions were found
 
-FOR URL FIELDS (Active URL, End of Sale Date URL, End of Standard Support URL, etc.):
-- CRITICAL: Do NOT search for new URLs. Use ONLY the URL that was already found during the corresponding date field search.
-- The URL recommendation MUST be the EXACT same official URL used to find the date.
-- If the search results show "Official source URL from corresponding date field search", use that URL directly.
-- If no URL was found during date search, recommend an empty value with low confidence.
-- The URL must be from the OFFICIAL vendor website only.
+FOR URL FIELDS (Active URL, Active Date URL, End of Sale Date URL, End of Standard Support URL, etc.):
+- CRITICAL: The search results will show "MANDATORY URL FOR THIS FIELD: [url]". You MUST use that EXACT URL as your recommendation.
+- Do NOT modify, shorten, or change the URL in any way.
+- Do NOT search for or recommend a different URL.
+- Copy the exact URL from the search results into your recommendation field.
+- The reasoning should state that this URL is the same source used to find the corresponding date.
+- If the search results say "No official URL was found", recommend null with low confidence (0.3).
 
 FOR DESCRIPTION FIELDS:
 - CRITICAL: Keep the description to MAXIMUM 250 characters
