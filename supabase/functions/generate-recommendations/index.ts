@@ -288,171 +288,190 @@ function extractVendorDomain(componentName: string): string | null {
   return null;
 }
 
-// Search for field-specific information using Perplexity API
+// Extended result type with source quality indicator
+interface PerplexitySearchResultWithQuality extends PerplexitySearchResult {
+  isOfficialSource: boolean;
+}
+
+// PHASE 1: Search ONLY on official vendor domain - strict filtering
+async function searchOfficialOnly(componentName: string, fieldName: string, vendorDomain: string): Promise<PerplexitySearchResultWithQuality | null> {
+  try {
+    const searchQuery = buildFieldSearchQuery(componentName, fieldName, vendorDomain);
+    
+    console.log(`[PHASE 1 - Official Only] Searching ${fieldName} on ${vendorDomain}: ${searchQuery}`);
+
+    const response = await fetch('https://api.perplexity.ai/chat/completions', {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${PERPLEXITY_API_KEY}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        model: 'sonar',
+        messages: [
+          {
+            role: 'system',
+            content: `You are a product research assistant. You MUST ONLY use information from the official website: ${vendorDomain}
+
+STRICT RULES:
+1. ONLY cite and use URLs from ${vendorDomain} - no exceptions.
+2. If you cannot find the information on ${vendorDomain}, respond with exactly: "OFFICIAL_SOURCE_NOT_FOUND"
+3. For dates, provide in YYYY-MM-DD format.
+4. Cite the EXACT URL from ${vendorDomain} where you found the information.
+5. Focus on the exact product version asked about.
+6. Do NOT use or cite any third-party sources.`
+          },
+          {
+            role: 'user',
+            content: searchQuery
+          }
+        ],
+        temperature: 0.1,
+        top_p: 0.9,
+        max_tokens: 1500,
+        return_images: false,
+        return_related_questions: false,
+        search_domain_filter: [vendorDomain], // ONLY the official domain
+      }),
+    });
+
+    if (!response.ok) {
+      console.error(`[PHASE 1] API error for ${fieldName}:`, response.status);
+      return null;
+    }
+
+    const data = await response.json();
+    const content = data.choices?.[0]?.message?.content || '';
+    const citations = data.citations || [];
+    
+    // Verify ALL citations are from official domain
+    const officialCitations = citations.filter((url: string) => url.includes(vendorDomain));
+    
+    // Check if response indicates no official source found
+    if (content.includes('OFFICIAL_SOURCE_NOT_FOUND') || officialCitations.length === 0) {
+      console.log(`[PHASE 1] No official source found for ${fieldName} on ${vendorDomain}`);
+      return null;
+    }
+    
+    console.log(`[PHASE 1] SUCCESS - Found on official source ${vendorDomain}`);
+    console.log(`[PHASE 1] Official citations:`, officialCitations);
+
+    return {
+      content: `[VERIFIED FROM OFFICIAL SOURCE: ${vendorDomain}]\n\n${content}`,
+      urls: officialCitations,
+      isOfficialSource: true
+    };
+  } catch (error) {
+    console.error('[PHASE 1] Error:', error);
+    return null;
+  }
+}
+
+// PHASE 2: Fallback search without domain restriction (lower confidence)
+async function searchFallback(componentName: string, fieldName: string, vendorDomain: string | null): Promise<PerplexitySearchResultWithQuality | null> {
+  try {
+    const searchQuery = buildFieldSearchQuery(componentName, fieldName, vendorDomain || undefined);
+    
+    console.log(`[PHASE 2 - Fallback] Broader search for ${fieldName}: ${searchQuery}`);
+
+    const response = await fetch('https://api.perplexity.ai/chat/completions', {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${PERPLEXITY_API_KEY}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        model: 'sonar',
+        messages: [
+          {
+            role: 'system',
+            content: `You are a product research assistant. This is a FALLBACK search because the official vendor website did not have the information.
+
+RULES:
+1. Try to find official vendor information if possible.
+2. If using third-party sources, explicitly state: "SOURCE: Third-party (not official vendor website)"
+3. For dates, provide in YYYY-MM-DD format.
+4. Cite the exact URLs used.
+5. Focus on the exact product version asked about.
+6. Clearly indicate if the source is NOT the official vendor.
+${vendorDomain ? `7. The official domain is ${vendorDomain} - flag if you're NOT using it.` : ''}`
+          },
+          {
+            role: 'user',
+            content: searchQuery
+          }
+        ],
+        temperature: 0.1,
+        top_p: 0.9,
+        max_tokens: 1500,
+        return_images: false,
+        return_related_questions: false,
+        search_recency_filter: 'year',
+      }),
+    });
+
+    if (!response.ok) {
+      console.error(`[PHASE 2] API error for ${fieldName}:`, response.status);
+      return null;
+    }
+
+    const data = await response.json();
+    const content = data.choices?.[0]?.message?.content || '';
+    const citations = data.citations || [];
+    
+    // Check if any citation is from official domain
+    const hasOfficialSource = vendorDomain && citations.some((url: string) => url.includes(vendorDomain));
+    
+    console.log(`[PHASE 2] Found ${citations.length} citations, official source: ${hasOfficialSource}`);
+
+    return {
+      content: hasOfficialSource 
+        ? content 
+        : `[WARNING: NOT FROM OFFICIAL VENDOR WEBSITE - Use with caution]\n\n${content}`,
+      urls: citations,
+      isOfficialSource: hasOfficialSource || false
+    };
+  } catch (error) {
+    console.error('[PHASE 2] Error:', error);
+    return null;
+  }
+}
+
+// Main search function: Two-phase approach - Official first, then fallback
 async function searchFieldInfo(componentName: string, fieldName: string): Promise<PerplexitySearchResult | null> {
   if (!PERPLEXITY_API_KEY) {
     console.log('Perplexity API key not configured, skipping web search');
     return null;
   }
 
-  try {
-    const vendorDomain = extractVendorDomain(componentName);
-    const searchQuery = buildFieldSearchQuery(componentName, fieldName, vendorDomain || undefined);
-    
-    // Build search instruction prioritizing official website
-    let searchInstruction = '';
-    if (vendorDomain) {
-      searchInstruction = `PRIORITY: Search FIRST on the official website (${vendorDomain}) for this information.
-If the information is found on ${vendorDomain}, use it and cite that URL.
-If NOT found on ${vendorDomain}, you may search other sources BUT you MUST explicitly state: "This information was NOT found on the official website (${vendorDomain})" in your response.`;
-    } else {
-      searchInstruction = `Search for official vendor documentation and announcements. If you cannot find information on an official vendor website, explicitly state this in your response.`;
+  const vendorDomain = extractVendorDomain(componentName);
+  console.log(`\n=== Two-Phase Search for ${fieldName} ===`);
+  console.log(`Component: ${componentName}, Vendor Domain: ${vendorDomain || 'unknown'}`);
+
+  // PHASE 1: Try official sources only (if we know the vendor)
+  if (vendorDomain) {
+    const officialResult = await searchOfficialOnly(componentName, fieldName, vendorDomain);
+    if (officialResult) {
+      console.log(`[RESULT] Using OFFICIAL source for ${fieldName}`);
+      return officialResult;
     }
-    
-    console.log(`Searching for ${fieldName}: ${searchQuery}`);
-    console.log(`Vendor domain for priority search: ${vendorDomain || 'unknown'}`);
-
-    const response = await fetch('https://api.perplexity.ai/chat/completions', {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${PERPLEXITY_API_KEY}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        model: 'sonar',
-        messages: [
-          {
-            role: 'system',
-            content: `You are a product research assistant specializing in finding OFFICIAL vendor information.
-
-${searchInstruction}
-
-CRITICAL RULES - OFFICIAL SOURCES ONLY:
-1. You MUST prioritize and use ONLY official vendor websites and documentation.
-2. For dates, always provide in YYYY-MM-DD format when available.
-3. Always cite the EXACT official URL where the information was found.
-4. If information comes from a third-party site (not the official vendor), you MUST clearly state: "NOT FROM OFFICIAL SOURCE".
-5. Focus ONLY on the exact product asked about, not similar products or different versions.
-6. ONLY use official documentation, release notes, lifecycle pages, and support announcements.
-7. If you cannot find official information, clearly state "Official source not found" in your response.
-8. DO NOT use Wikipedia, blogs, or other unofficial sources as primary references.`
-          },
-          {
-            role: 'user',
-            content: searchQuery
-          }
-        ],
-        temperature: 0.1,
-        top_p: 0.9,
-        max_tokens: 1500,
-        return_images: false,
-        return_related_questions: false,
-        search_recency_filter: 'year',
-        search_domain_filter: vendorDomain ? [vendorDomain, 'endoflife.date'] : undefined,
-      }),
-    });
-
-    if (!response.ok) {
-      const errorText = await response.text();
-      console.error('Perplexity API error:', response.status, errorText);
-      
-      // If domain filter fails, retry without it
-      if (vendorDomain) {
-        console.log('Retrying search without domain filter...');
-        return searchFieldInfoFallback(componentName, fieldName, searchQuery, vendorDomain);
-      }
-      return null;
-    }
-
-    const data = await response.json();
-    const content = data.choices?.[0]?.message?.content || '';
-    const citations = data.citations || [];
-    
-    // Check if any citation is from the official domain
-    const hasOfficialSource = vendorDomain && citations.some((url: string) => url.includes(vendorDomain));
-    let enrichedContent = content;
-    
-    if (vendorDomain && !hasOfficialSource && citations.length > 0) {
-      enrichedContent = `[NOTE: Information NOT found on official website (${vendorDomain}). Sources used: ${citations.join(', ')}]\n\n${content}`;
-    }
-    
-    console.log(`Perplexity response for ${fieldName}:`, enrichedContent.substring(0, 300));
-    console.log('Citations:', citations);
-    console.log(`Has official source (${vendorDomain}):`, hasOfficialSource);
-
-    return {
-      content: enrichedContent,
-      urls: citations
-    };
-  } catch (error) {
-    console.error('Error searching field info:', error);
-    return null;
+    console.log(`[RESULT] Official source not found, proceeding to Phase 2...`);
   }
+
+  // PHASE 2: Fallback to broader search
+  const fallbackResult = await searchFallback(componentName, fieldName, vendorDomain);
+  if (fallbackResult) {
+    console.log(`[RESULT] Using FALLBACK source for ${fieldName} (isOfficial: ${fallbackResult.isOfficialSource})`);
+    return fallbackResult;
+  }
+
+  console.log(`[RESULT] No results found for ${fieldName}`);
+  return null;
 }
 
-// Fallback search without domain filter
+// Legacy function - kept for compatibility but now uses two-phase approach
 async function searchFieldInfoFallback(componentName: string, fieldName: string, searchQuery: string, vendorDomain: string): Promise<PerplexitySearchResult | null> {
-  try {
-    const response = await fetch('https://api.perplexity.ai/chat/completions', {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${PERPLEXITY_API_KEY}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        model: 'sonar',
-        messages: [
-          {
-            role: 'system',
-            content: `You are a product research assistant. Search for OFFICIAL vendor information ONLY.
-CRITICAL: You MUST prioritize official vendor websites and documentation.
-IMPORTANT: If the information is NOT from the official website (${vendorDomain}), explicitly state "NOT FROM OFFICIAL SOURCE".
-For dates, always provide in YYYY-MM-DD format when available.
-Always cite the EXACT official URL where the information was found.
-Focus ONLY on the exact product asked about, not similar products.
-DO NOT use Wikipedia, blogs, or other unofficial sources as primary references.`
-          },
-          {
-            role: 'user',
-            content: searchQuery
-          }
-        ],
-        temperature: 0.1,
-        top_p: 0.9,
-        max_tokens: 1500,
-        return_images: false,
-        return_related_questions: false,
-        search_recency_filter: 'year',
-      }),
-    });
-
-    if (!response.ok) {
-      console.error('Fallback search also failed');
-      return null;
-    }
-
-    const data = await response.json();
-    const content = data.choices?.[0]?.message?.content || '';
-    const citations = data.citations || [];
-    
-    // Check if any citation is from the official domain
-    const hasOfficialSource = citations.some((url: string) => url.includes(vendorDomain));
-    let enrichedContent = content;
-    
-    if (!hasOfficialSource && citations.length > 0) {
-      enrichedContent = `[NOTE: Information NOT found on official website (${vendorDomain}). Sources used: ${citations.join(', ')}]\n\n${content}`;
-    }
-    
-    console.log(`Fallback response for ${fieldName}:`, enrichedContent.substring(0, 300));
-
-    return {
-      content: enrichedContent,
-      urls: citations
-    };
-  } catch (error) {
-    console.error('Error in fallback search:', error);
-    return null;
-  }
+  return searchFallback(componentName, fieldName, vendorDomain);
 }
 
 serve(async (req) => {
@@ -608,11 +627,18 @@ ${searchContext}
 
 FIELD-SPECIFIC GUIDELINES:
 
+SOURCE QUALITY & CONFIDENCE:
+- If search results show "[VERIFIED FROM OFFICIAL SOURCE: ...]", use HIGH confidence (0.85-0.95)
+- If search results show "[WARNING: NOT FROM OFFICIAL VENDOR WEBSITE...]", use LOWER confidence (0.5-0.7) and mention this in reasoning
+- Official vendor sources should always be preferred and get higher confidence
+- Third-party sources should be flagged as such and get reduced confidence
+
 FOR DATE FIELDS (Active Date, End of Sale Date, End of Standard Support, etc.):
 - Provide the date in YYYY-MM-DD format
 - In the reasoning, ALWAYS include the official source URL where this date was found
-- If search results contain the date, use it with high confidence (0.9+)
-- If no date found, set confidence to 0.5 and explain
+- If from OFFICIAL vendor source, use high confidence (0.85-0.95)
+- If from THIRD-PARTY source, use lower confidence (0.5-0.7) and state "Source: Third-party website (not official vendor)"
+- If no date found, set confidence to 0.4 and explain
 - CRITICAL VERSION MATCHING: Match the EXACT version in the component name.
   * If the component is "Product 25.10" (no patch number), this means version 25.10.0 - use the release date for 25.10.0 specifically, NOT 25.10.100 or 25.10.300
   * Version "25.10" = "25.10.0" (the initial .0 release of that minor version)
@@ -652,8 +678,8 @@ Respond with a JSON array of recommendations. Each recommendation must have:
 - fieldName: the original field name  
 - currentValue: the current value (if any)
 - recommendation: your suggested value
-- confidence: a number between 0 and 1 (use 0.9+ if from search, 0.5 if uncertain)
-- reasoning: brief explanation (1-2 sentences). For date fields, ALWAYS include the source URL.`;
+- confidence: a number between 0 and 1 (0.85-0.95 for official sources, 0.5-0.7 for third-party, 0.4 or less if uncertain)
+- reasoning: brief explanation (1-2 sentences). For date fields, ALWAYS include the source URL and indicate if from official or third-party source.`;
 
     const userPrompt = `Given the following catalog fields from an IT Component page, provide recommendations:
 
