@@ -537,6 +537,26 @@ serve(async (req) => {
     const componentName = passedComponentName || nameField?.currentValue || null;
     console.log('Using component name for search:', componentName);
 
+    // CRITICAL: If requesting recommendations for the Name field with no current value,
+    // return null recommendation immediately - don't let AI hallucinate random product names
+    if (nameField && (!nameField.currentValue || nameField.currentValue.trim() === '') && !passedComponentName) {
+      console.log('Name field is empty and no component name provided - returning prompt to enter name');
+      return new Response(
+        JSON.stringify({ 
+          recommendations: [{
+            fieldId: nameField.fieldId,
+            fieldName: 'Name',
+            currentValue: null,
+            recommendation: null,
+            confidence: 0,
+            reasoning: 'Please enter a component name following the format: [Provider Name] + [Product Name] + [Version]. For example: "Microsoft SQL Server 2022 Standard" or "MongoDB Community Server 8.2"'
+          }],
+          cachedUrls: {}
+        }),
+        { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
+
     // For each field, search for specific info using Perplexity
     // Clear and repopulate the URL cache from passed cached URLs
     for (const key in dateFieldUrlCache) {
