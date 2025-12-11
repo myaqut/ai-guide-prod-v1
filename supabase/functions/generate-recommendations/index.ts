@@ -255,6 +255,20 @@ function extractVendorDomain(componentName: string): string | null {
     'intel': 'intel.com',
     'nvidia': 'nvidia.com',
     'amd': 'amd.com',
+    // Industrial automation
+    'siemens': 'siemens.com',
+    'tia portal': 'siemens.com',
+    'rockwell': 'rockwellautomation.com',
+    'allen-bradley': 'rockwellautomation.com',
+    'schneider': 'se.com',
+    'abb': 'abb.com',
+    'honeywell': 'honeywell.com',
+    'emerson': 'emerson.com',
+    'yokogawa': 'yokogawa.com',
+    'mitsubishi electric': 'mitsubishielectric.com',
+    'omron': 'omron.com',
+    'beckhoff': 'beckhoff.com',
+    'plc': 'siemens.com',
     // Security
     'palo alto': 'paloaltonetworks.com',
     'fortinet': 'fortinet.com',
@@ -344,8 +358,16 @@ STRICT RULES:
     const content = data.choices?.[0]?.message?.content || '';
     const citations = data.citations || [];
     
-    // Verify ALL citations are from official domain
-    const officialCitations = citations.filter((url: string) => url.includes(vendorDomain));
+    // Verify ALL citations are from official domain (support subdomains like support.industry.siemens.com)
+    const domainBase = vendorDomain.replace(/^(www\.)?/, '');
+    const officialCitations = citations.filter((url: string) => {
+      try {
+        const urlObj = new URL(url);
+        return urlObj.hostname.endsWith(domainBase) || urlObj.hostname === domainBase;
+      } catch {
+        return url.includes(domainBase);
+      }
+    });
     
     // Check if response indicates no official source found
     if (content.includes('OFFICIAL_SOURCE_NOT_FOUND') || officialCitations.length === 0) {
@@ -419,8 +441,16 @@ ${vendorDomain ? `7. The official domain is ${vendorDomain} - flag if you're NOT
     const content = data.choices?.[0]?.message?.content || '';
     const citations = data.citations || [];
     
-    // Check if any citation is from official domain
-    const hasOfficialSource = vendorDomain && citations.some((url: string) => url.includes(vendorDomain));
+    // Check if any citation is from official domain (support subdomains)
+    const domainBase = vendorDomain?.replace(/^(www\.)?/, '') || '';
+    const hasOfficialSource = vendorDomain && citations.some((url: string) => {
+      try {
+        const urlObj = new URL(url);
+        return urlObj.hostname.endsWith(domainBase) || urlObj.hostname === domainBase;
+      } catch {
+        return url.includes(domainBase);
+      }
+    });
     
     console.log(`[PHASE 2] Found ${citations.length} citations, official source: ${hasOfficialSource}`);
 
