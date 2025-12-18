@@ -176,6 +176,7 @@ function extractVendorDomain(componentName: string): string | null {
     'nginx': 'nginx.com',
     'hashicorp': 'hashicorp.com',
     'terraform': 'hashicorp.com',
+    'vaultspeed': 'vaultspeed.com',  // Must be before 'vault' to avoid HashiCorp Vault match
     'vault': 'hashicorp.com',
     'consul': 'hashicorp.com',
     'ansible': 'ansible.com',
