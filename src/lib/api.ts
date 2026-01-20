@@ -1,4 +1,5 @@
 import { supabase } from "@/integrations/supabase/client";
+import { WorkflowType } from "./workflow-config";
 
 export interface FieldData {
   fieldId: string;
@@ -24,10 +25,11 @@ export async function generateRecommendations(
   fields: FieldData[],
   pageContext?: string,
   componentName?: string,
-  cachedUrls?: Record<string, string[]>
+  cachedUrls?: Record<string, string[]>,
+  workflowType: WorkflowType = 'itc'
 ): Promise<GenerateRecommendationsResult> {
   const { data, error } = await supabase.functions.invoke('generate-recommendations', {
-    body: { fields, pageContext, componentName, cachedUrls },
+    body: { fields, pageContext, componentName, cachedUrls, workflowType },
   });
 
   if (error) {

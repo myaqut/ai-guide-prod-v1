@@ -9,6 +9,9 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 };
 
+// Workflow types
+type WorkflowType = 'itc' | 'application';
+
 interface FieldData {
   fieldId: string;
   fieldName: string;
@@ -32,13 +35,23 @@ interface PerplexitySearchResult {
 // Store URLs found during date field searches for reuse in URL fields
 const dateFieldUrlCache: Record<string, string[]> = {};
 
-// Check if a field is a lifecycle-related field (date or URL)
+// Check if a field is a lifecycle-related field (date or URL) - for ITC workflow
 function isLifecycleField(fieldName: string): boolean {
   const lifecycleKeywords = ['active', 'end of sale', 'end of support', 'end of life', 'lifecycle', 'eol', 'eos', 'release', 'standard support', 'endoflife'];
   // Normalize: remove parentheses and extra spaces for matching
   const lowerName = fieldName.toLowerCase().replace(/[()]/g, '').replace(/\s+/g, ' ');
   const fieldId = fieldName.toLowerCase().replace(/[_-]/g, ''); // Also check camelCase fieldId
   return lifecycleKeywords.some(keyword => lowerName.includes(keyword) || fieldId.includes(keyword.replace(/\s+/g, '')));
+}
+
+// Check if a field needs search for Application workflow
+function isApplicationSearchField(fieldName: string): boolean {
+  const searchableFields = [
+    'description', 'provider', 'vendor', 'business capability', 'hosting', 'data classification',
+    'integration', 'gdpr', 'compliance', 'sso', 'authentication', 'pricing', 'category', 'website'
+  ];
+  const lowerName = fieldName.toLowerCase();
+  return searchableFields.some(keyword => lowerName.includes(keyword));
 }
 
 // Check if this is a URL field that should use cached URL from date search
@@ -95,7 +108,7 @@ function getDateFieldCacheKey(fieldName: string): string | null {
   return null;
 }
 
-// Build a search query based on field type - prioritizing official sources
+// Build a search query based on field type - prioritizing official sources (ITC workflow)
 function buildFieldSearchQuery(componentName: string, fieldName: string, vendorDomain?: string): string {
   const lowerFieldName = fieldName.toLowerCase();
   
@@ -146,6 +159,74 @@ function buildFieldSearchQuery(componentName: string, fieldName: string, vendorD
   
   // Default query for lifecycle info - emphasize official sources
   return `"${componentName}" official product lifecycle dates release end of support ${officialSourceHint}`;
+}
+
+// Build search queries for Application workflow fields
+function buildApplicationSearchQuery(appName: string, fieldName: string, vendorDomain?: string): string {
+  const lowerFieldName = fieldName.toLowerCase();
+  
+  // Official source hint
+  const officialSourceHint = vendorDomain 
+    ? `site:${vendorDomain}` 
+    : 'official website';
+  
+  // Description - what the application does
+  if (lowerFieldName.includes('description')) {
+    return `"${appName}" SaaS application what is ${appName} features capabilities overview ${officialSourceHint}`;
+  }
+  
+  // Provider/Vendor
+  if (lowerFieldName.includes('provider') || lowerFieldName.includes('vendor')) {
+    return `"${appName}" vendor company who makes ${appName}`;
+  }
+  
+  // Business Capability
+  if (lowerFieldName.includes('business') || lowerFieldName.includes('capability')) {
+    return `"${appName}" business use case what is it used for business capabilities`;
+  }
+  
+  // Hosting Type
+  if (lowerFieldName.includes('hosting')) {
+    return `"${appName}" hosting model SaaS on-premise cloud deployment options`;
+  }
+  
+  // Data Classification
+  if (lowerFieldName.includes('data') && lowerFieldName.includes('classification')) {
+    return `"${appName}" data handling security data types processed SOC2 ISO27001`;
+  }
+  
+  // Integrations
+  if (lowerFieldName.includes('integration')) {
+    return `"${appName}" integrations API connections supported platforms`;
+  }
+  
+  // GDPR Compliance
+  if (lowerFieldName.includes('gdpr')) {
+    return `"${appName}" GDPR compliance data privacy EU regulations`;
+  }
+  
+  // SSO Support
+  if (lowerFieldName.includes('sso') || lowerFieldName.includes('authentication')) {
+    return `"${appName}" SSO single sign-on SAML OAuth authentication support`;
+  }
+  
+  // Website
+  if (lowerFieldName.includes('website')) {
+    return `"${appName}" official website homepage`;
+  }
+  
+  // Lifecycle Phase
+  if (lowerFieldName.includes('lifecycle') || lowerFieldName.includes('phase')) {
+    return `"${appName}" product status active deprecated end of life`;
+  }
+  
+  // Functional/Technical Fit - these are usually internal assessments, provide guidance
+  if (lowerFieldName.includes('functional') || lowerFieldName.includes('technical')) {
+    return `"${appName}" reviews ratings G2 Capterra Gartner evaluation`;
+  }
+  
+  // Default
+  return `"${appName}" SaaS application overview features ${officialSourceHint}`;
 }
 
 // Extract vendor/provider from component name for official site search
@@ -505,6 +586,53 @@ async function searchFieldInfoFallback(componentName: string, fieldName: string,
   return searchFallback(componentName, fieldName, vendorDomain);
 }
 
+// Build system prompt for IT Component (ITC) workflow
+function buildITCSystemPrompt(componentName: string | null, searchContext: string): string {
+  return `You are an AI assistant specialized in IT catalog management. Your job is to suggest values for IT Component catalog fields.
+
+CRITICAL - COMPONENT IDENTITY ANCHOR:
+${componentName ? `- The IT Component being cataloged is: "${componentName}"
+- ALL your recommendations MUST be specifically about "${componentName}" and NO other product` : '- No component name provided yet.'}
+
+NAMING CONVENTION: [Provider Name] + [Product Name] + [Version]
+Examples: "MongoDB Community Server 8.2", "Microsoft SQL Server 2022 Standard"
+
+${searchContext}
+
+FOR DATE FIELDS: Provide in YYYY-MM-DD format. Include source URL in reasoning.
+FOR URL FIELDS: Use the EXACT URL from search results.
+FOR DESCRIPTION: Max 250 characters, general description.
+FOR PROVIDER: Use official company name.
+
+Respond with a JSON array. Each item: fieldId, fieldName, currentValue, recommendation, confidence (0-1), reasoning.`;
+}
+
+// Build system prompt for Application workflow
+function buildApplicationSystemPrompt(appName: string | null, searchContext: string): string {
+  return `You are an AI assistant specialized in IT catalog management. Your job is to suggest values for SaaS Application catalog fields.
+
+CRITICAL - APPLICATION IDENTITY ANCHOR:
+${appName ? `- The Application being cataloged is: "${appName}"
+- ALL your recommendations MUST be specifically about "${appName}"` : '- No application name provided yet.'}
+
+NAMING: Use official product name (e.g., "Salesforce Sales Cloud", "Microsoft Teams"). No version numbers for SaaS.
+
+${searchContext}
+
+FIELD GUIDELINES:
+- Description: Max 250 chars, what it does
+- Provider: Official company name
+- Business Capability: Main function (e.g., "CRM", "Project Management")
+- Functional/Technical Fit: "Excellent"/"Good"/"Adequate"/"Insufficient"/"Not Assessed"
+- Lifecycle Phase: "Plan"/"Phase In"/"Active"/"Phase Out"/"End of Life"
+- Hosting Type: "SaaS"/"On-Premise"/"Hybrid"/"PaaS"
+- Data Classification: "Public"/"Internal"/"Confidential"/"Restricted"
+- GDPR: "Yes"/"No"/"Partial"/"Unknown"
+- SSO: "Yes"/"No"/"Enterprise Only"
+
+Respond with a JSON array. Each item: fieldId, fieldName, currentValue, recommendation, confidence (0-1), reasoning.`;
+}
+
 serve(async (req) => {
   // Handle CORS preflight requests
   if (req.method === 'OPTIONS') {
@@ -520,11 +648,14 @@ serve(async (req) => {
       );
     }
 
-    const { fields, pageContext, componentName: passedComponentName, cachedUrls: passedCachedUrls } = await req.json();
+    const { fields, pageContext, componentName: passedComponentName, cachedUrls: passedCachedUrls, workflowType = 'itc' } = await req.json();
     console.log('Received fields:', fields);
     console.log('Page context:', pageContext);
     console.log('Passed component name:', passedComponentName);
     console.log('Received cached URLs:', passedCachedUrls);
+    console.log('Workflow type:', workflowType);
+
+    const isApplicationWorkflow = workflowType === 'application';
 
     if (!fields || !Array.isArray(fields)) {
       return new Response(
@@ -536,12 +667,15 @@ serve(async (req) => {
     // Use passed component name (approved earlier), or fall back to extracting from fields
     const nameField = fields.find((f: FieldData) => f.fieldName?.toLowerCase() === 'name');
     const componentName = passedComponentName || nameField?.currentValue || null;
-    console.log('Using component name for search:', componentName);
+    console.log('Using component/app name for search:', componentName);
 
     // CRITICAL: If requesting recommendations for the Name field with no current value,
-    // return null recommendation immediately - don't let AI hallucinate random product names
+    // return null recommendation immediately - don't let AI hallucinate random names
     if (nameField && (!nameField.currentValue || nameField.currentValue.trim() === '') && !passedComponentName) {
-      console.log('Name field is empty and no component name provided - returning prompt to enter name');
+      console.log('Name field is empty and no name provided - returning prompt to enter name');
+      const nameGuidance = isApplicationWorkflow 
+        ? 'Please enter the application name. For example: "Salesforce Sales Cloud" or "Microsoft Teams"'
+        : 'Please enter a component name following the format: [Provider Name] + [Product Name] + [Version]. For example: "Microsoft SQL Server 2022 Standard" or "MongoDB Community Server 8.2"';
       return new Response(
         JSON.stringify({ 
           recommendations: [{
@@ -550,7 +684,7 @@ serve(async (req) => {
             currentValue: null,
             recommendation: null,
             confidence: 0,
-            reasoning: 'Please enter a component name following the format: [Provider Name] + [Product Name] + [Version]. For example: "Microsoft SQL Server 2022 Standard" or "MongoDB Community Server 8.2"'
+            reasoning: nameGuidance
           }],
           cachedUrls: {}
         }),
@@ -576,63 +710,81 @@ serve(async (req) => {
     let searchResults: Record<string, PerplexitySearchResult | null> = {};
     
     if (componentName) {
-      // First pass: Search for date fields and cache their URLs
-      for (const field of fields) {
-        const cacheKey = getDateFieldCacheKey(field.fieldName);
-        const isUrlField = isUrlFieldForCachedDate(field.fieldName);
-        
-        // Skip URL fields in first pass - they will use cached URLs
-        if (isUrlField) {
-          console.log(`Skipping URL field (will use cached URL): ${field.fieldName}`);
-          continue;
-        }
-        
-        const needsSearch = isLifecycleField(field.fieldName) || 
-                           field.fieldName.toLowerCase().includes('description') ||
-                           field.fieldName.toLowerCase().includes('provider') ||
-                           field.fieldName.toLowerCase().includes('category') ||
-                           field.fieldName.toLowerCase().includes('website') ||
-                           field.fieldName.toLowerCase().includes('homepage');
-        
-        console.log(`Field "${field.fieldName}" - isLifecycleField: ${isLifecycleField(field.fieldName)}, needsSearch: ${needsSearch}, cacheKey: ${cacheKey}`);
-        
-        if (needsSearch) {
-          console.log(`Searching info for field: ${field.fieldName}`);
-          const result = await searchFieldInfo(componentName, field.fieldName);
-          searchResults[field.fieldId] = result;
+      if (isApplicationWorkflow) {
+        // APPLICATION WORKFLOW: Search for SaaS-specific fields
+        for (const field of fields) {
+          const needsSearch = isApplicationSearchField(field.fieldName);
           
-          // Cache URLs for date fields so URL fields can reuse them
-          if (cacheKey && result && result.urls && result.urls.length > 0) {
-            dateFieldUrlCache[cacheKey] = result.urls;
-            console.log(`Cached URLs for ${cacheKey}:`, result.urls);
+          if (needsSearch) {
+            console.log(`[Application] Searching info for field: ${field.fieldName}`);
+            const vendorDomain = extractVendorDomain(componentName);
+            const searchQuery = buildApplicationSearchQuery(componentName, field.fieldName, vendorDomain || undefined);
+            
+            // Use fallback search for applications (broader sources acceptable)
+            const result = await searchFallback(componentName, field.fieldName, vendorDomain);
+            searchResults[field.fieldId] = result;
           }
         }
-      }
-      
-      // Second pass: Handle URL fields using cached URLs from date searches
-      for (const field of fields) {
-        const urlCacheKey = isUrlFieldForCachedDate(field.fieldName);
+      } else {
+        // ITC WORKFLOW: Original lifecycle-focused search
+        // First pass: Search for date fields and cache their URLs
+        for (const field of fields) {
+          const cacheKey = getDateFieldCacheKey(field.fieldName);
+          const isUrlField = isUrlFieldForCachedDate(field.fieldName);
+          
+          // Skip URL fields in first pass - they will use cached URLs
+          if (isUrlField) {
+            console.log(`Skipping URL field (will use cached URL): ${field.fieldName}`);
+            continue;
+          }
+          
+          const needsSearch = isLifecycleField(field.fieldName) || 
+                             field.fieldName.toLowerCase().includes('description') ||
+                             field.fieldName.toLowerCase().includes('provider') ||
+                             field.fieldName.toLowerCase().includes('category') ||
+                             field.fieldName.toLowerCase().includes('website') ||
+                             field.fieldName.toLowerCase().includes('homepage');
+          
+          console.log(`Field "${field.fieldName}" - isLifecycleField: ${isLifecycleField(field.fieldName)}, needsSearch: ${needsSearch}, cacheKey: ${cacheKey}`);
+          
+          if (needsSearch) {
+            console.log(`Searching info for field: ${field.fieldName}`);
+            const result = await searchFieldInfo(componentName, field.fieldName);
+            searchResults[field.fieldId] = result;
+            
+            // Cache URLs for date fields so URL fields can reuse them
+            if (cacheKey && result && result.urls && result.urls.length > 0) {
+              dateFieldUrlCache[cacheKey] = result.urls;
+              console.log(`Cached URLs for ${cacheKey}:`, result.urls);
+            }
+          }
+        }
         
-        if (urlCacheKey) {
-          const cachedUrls = dateFieldUrlCache[urlCacheKey];
-          if (cachedUrls && cachedUrls.length > 0) {
-            // Use the first official URL from the date field search - this MUST be the exact same URL
-            const officialUrl = cachedUrls[0];
-            console.log(`Using cached URL for ${field.fieldName} from ${urlCacheKey}: ${officialUrl}`);
-            searchResults[field.fieldId] = {
-              content: `MANDATORY URL FOR THIS FIELD: ${officialUrl}
-              
+        // Second pass: Handle URL fields using cached URLs from date searches
+        for (const field of fields) {
+          const urlCacheKey = isUrlFieldForCachedDate(field.fieldName);
+          
+          if (urlCacheKey) {
+            const cachedUrls = dateFieldUrlCache[urlCacheKey];
+            if (cachedUrls && cachedUrls.length > 0) {
+              // Use the first official URL from the date field search - this MUST be the exact same URL
+              const officialUrl = cachedUrls[0];
+              console.log(`Using cached URL for ${field.fieldName} from ${urlCacheKey}: ${officialUrl}`);
+              searchResults[field.fieldId] = {
+                content: `MANDATORY URL FOR THIS FIELD: ${officialUrl}
+                
 This is the EXACT official source URL that was used to find the corresponding date. 
 You MUST recommend this exact URL: ${officialUrl}
 Do NOT recommend any other URL. The recommendation field value must be exactly: ${officialUrl}`,
-              urls: [officialUrl] // Only pass the single URL to avoid confusion
-            };
-          } else {
-            console.log(`No cached URL found for ${field.fieldName} (cache key: ${urlCacheKey})`);
-            searchResults[field.fieldId] = {
-              content: 'No official URL was found during the date field search. The corresponding date field did not return any official source URLs. Recommend null or empty value.',
-              urls: []
-            };
+                urls: [officialUrl] // Only pass the single URL to avoid confusion
+              };
+            } else {
+              console.log(`No cached URL found for ${field.fieldName} (cache key: ${urlCacheKey})`);
+              searchResults[field.fieldId] = {
+                content: 'No official URL was found during the date field search. The corresponding date field did not return any official source URLs. Recommend null or empty value.',
+                urls: []
+              };
+            }
           }
         }
       }
@@ -657,91 +809,22 @@ USE THESE SEARCH RESULTS as your primary source. Include the source URL in your 
 `;
     }
 
-    const systemPrompt = `You are an AI assistant specialized in IT catalog management. Your job is to suggest values for IT Component catalog fields.
+    // Build workflow-specific system prompt
+    const systemPrompt = isApplicationWorkflow 
+      ? buildApplicationSystemPrompt(componentName, searchContext)
+      : buildITCSystemPrompt(componentName, searchContext);
 
-CRITICAL - COMPONENT IDENTITY ANCHOR:
-${componentName ? `- The IT Component being cataloged is: "${componentName}"
-- ALL your recommendations MUST be specifically about "${componentName}" and NO other product
-- Do NOT search for or provide information about different products, versions, or variants
-- Do NOT confuse this with similarly named products from other vendors
-- Stay strictly focused on the EXACT component: "${componentName}"` : '- No component name provided yet. Suggest an appropriate name based on context.'}
+    const entityType = isApplicationWorkflow ? 'Application' : 'IT Component';
+    const userPrompt = `Given the following catalog fields from a ${entityType} page, provide recommendations:
 
-NAMING CONVENTION: Always follow this pattern for the Name field:
-[Provider Name] + [Product Name] + [Version]
-Examples:
-- "MongoDB Community Server 8.2"
-- "Oracle Database Enterprise Edition 19c"
-- "Microsoft SQL Server 2022 Standard"
-- "Apache Kafka 3.5"
-
-${searchContext}
-
-FIELD-SPECIFIC GUIDELINES:
-
-SOURCE QUALITY & CONFIDENCE:
-- If search results show "[VERIFIED FROM OFFICIAL SOURCE: ...]", use HIGH confidence (0.85-0.95)
-- If search results show "[WARNING: NOT FROM OFFICIAL VENDOR WEBSITE...]", use LOWER confidence (0.5-0.7) and mention this in reasoning
-- Official vendor sources should always be preferred and get higher confidence
-- Third-party sources should be flagged as such and get reduced confidence
-
-FOR DATE FIELDS (Active Date, End of Sale Date, End of Standard Support, etc.):
-- Provide the date in YYYY-MM-DD format
-- In the reasoning, ALWAYS include the official source URL where this date was found
-- If from OFFICIAL vendor source, use high confidence (0.85-0.95)
-- If from THIRD-PARTY source, use lower confidence (0.5-0.7) and state "Source: Third-party website (not official vendor)"
-- If no date found, set confidence to 0.4 and explain
-- CRITICAL VERSION MATCHING: Match the EXACT version in the component name.
-  * If the component is "Product 25.10" (no patch number), this means version 25.10.0 - use the release date for 25.10.0 specifically, NOT 25.10.100 or 25.10.300
-  * Version "25.10" = "25.10.0" (the initial .0 release of that minor version)
-  * Version "25.10.100" or "25.10.300" are DIFFERENT versions - do NOT use their dates
-  * If the search results show multiple version dates, pick the one matching the EXACT version in the component name
-  * If the exact version date is not found, set confidence to 0.5 and explain which versions were found
-
-FOR URL FIELDS (Active URL, Active Date URL, End of Sale Date URL, End of Standard Support URL, etc.):
-- CRITICAL: The search results will show "MANDATORY URL FOR THIS FIELD: [url]". You MUST use that EXACT URL as your recommendation.
-- Do NOT modify, shorten, or change the URL in any way.
-- Do NOT search for or recommend a different URL.
-- Copy the exact URL from the search results into your recommendation field.
-- The reasoning should state that this URL is the same source used to find the corresponding date.
-- If the search results say "No official URL was found", recommend null with low confidence (0.3).
-
-FOR DESCRIPTION FIELDS:
-- CRITICAL: Keep the description to MAXIMUM 250 characters
-- Write a GENERAL description of the product/component, NOT version-specific features
-- Describe what the product IS and what it DOES in general terms
-- Do NOT mention specific version numbers or version-specific release notes
-- Focus on the core purpose, main capabilities, and use cases of the product
-
-FOR PROVIDER/VENDOR FIELDS:
-- Extract the vendor name from search results
-- Use official company name (e.g., "MongoDB, Inc." not just "Mongo")
-
-FOR CATEGORY FIELDS:
-- Determine the software category (Database, Application Server, Framework, etc.)
-
-FOR COMPONENT WEBSITE FIELDS:
-- Provide the MAIN product homepage URL (not version-specific pages)
-- Use the official vendor website URL for the product (e.g., https://www.liquibase.com not https://www.liquibase.com/downloads/liquibase-4-29-0)
-- This should be the general product landing page, NOT a specific version download or release page
-
-Respond with a JSON array of recommendations. Each recommendation must have:
-- fieldId: the original field ID
-- fieldName: the original field name  
-- currentValue: the current value (if any)
-- recommendation: your suggested value
-- confidence: a number between 0 and 1 (0.85-0.95 for official sources, 0.5-0.7 for third-party, 0.4 or less if uncertain)
-- reasoning: brief explanation (1-2 sentences). For date fields, ALWAYS include the source URL and indicate if from official or third-party source.`;
-
-    const userPrompt = `Given the following catalog fields from an IT Component page, provide recommendations:
-
-Page Context: ${pageContext || 'IT Component catalog entry'}
-${componentName ? `\nIMPORTANT: This is for the component "${componentName}" - ALL recommendations must be specifically for this exact product only.\n` : ''}
+Page Context: ${pageContext || `LeanIX ${entityType} catalog entry`}
+${componentName ? `\nIMPORTANT: This is for "${componentName}" - ALL recommendations must be specifically for this exact ${entityType.toLowerCase()} only.\n` : ''}
 Fields to analyze:
 ${fields.map((f: FieldData) => `- ${f.fieldName} (ID: ${f.fieldId})${f.currentValue ? `: current value "${f.currentValue}"` : ': empty'}`).join('\n')}
 
-${Object.keys(searchResults).length > 0 ? 'Use the Perplexity search results provided in the system prompt for accurate information.' : ''}
+${Object.keys(searchResults).length > 0 ? 'Use the search results provided in the system prompt for accurate information.' : ''}
 
-Provide recommendations following the naming convention for the Name field and appropriate professional values for other fields. Return ONLY a valid JSON array.`;
+Provide recommendations with appropriate professional values for all fields. Return ONLY a valid JSON array.`;
 
     console.log('Calling Lovable AI Gateway...');
 
