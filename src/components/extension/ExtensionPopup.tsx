@@ -48,19 +48,10 @@ export const ExtensionPopup = () => {
     return isValidNameFormat(name, workflowType);
   };
 
-export const ExtensionPopup = () => {
-  const [showSettings, setShowSettings] = useState(false);
-  const [apiKeyConfigured, setApiKeyConfigured] = useState(true);
-  const [recommendations, setRecommendations] = useState<FieldRecommendation[]>([]);
-  const [isAnalyzing, setIsAnalyzing] = useState(false);
-  const [pageContext, setPageContext] = useState("LeanIX IT Component");
-  const [activeFieldId, setActiveFieldId] = useState<string | null>(null);
-  const [approvedComponentName, setApprovedComponentName] = useState<string | null>(null);
-  const [nameFieldStatus, setNameFieldStatus] = useState<'pending' | 'valid' | 'invalid'>('pending');
-  const [urlCache, setUrlCache] = useState<Record<string, string[]>>({});
-
   // Generate recommendation for a single field
   const generateSingleFieldRecommendation = useCallback(async (field: FieldData) => {
+    if (!workflowType) return;
+    
     console.log('[ExtensionPopup] Generating recommendation for field:', field.fieldName, 'with component:', approvedComponentName);
     console.log('[ExtensionPopup] Current URL cache:', urlCache);
     
@@ -71,7 +62,7 @@ export const ExtensionPopup = () => {
 
     try {
       // Pass the approved component name and cached URLs to anchor the search
-      const result = await generateRecommendations([field], pageContext, approvedComponentName || undefined, urlCache, workflowType || 'itc');
+      const result = await generateRecommendations([field], pageContext, approvedComponentName || undefined, urlCache, workflowType);
       const rec = result.recommendations.find(r => r.fieldId === field.fieldId);
       
       // Update URL cache if new URLs were returned
@@ -103,7 +94,7 @@ export const ExtensionPopup = () => {
       );
       toast.error(`Failed to get recommendation for ${field.fieldName}`);
     }
-  }, [pageContext, approvedComponentName, urlCache]);
+  }, [pageContext, approvedComponentName, urlCache, workflowType]);
 
   // Handle active field change from content script - fetch recommendation for that field only
   const handleActiveFieldChange = useCallback((field: FieldData) => {
@@ -188,11 +179,6 @@ export const ExtensionPopup = () => {
     };
   }, [handleActiveFieldChange]);
 
-  // Load Name field from the page on mount - this is the entry point
-  useEffect(() => {
-    loadNameField();
-  }, []);
-
   const loadNameField = async () => {
     // CRITICAL: Clear all previous state before loading new Name field
     setRecommendations([]);
@@ -218,7 +204,6 @@ export const ExtensionPopup = () => {
             if (response && response.field) {
               const nameField = response.field;
               console.log('[ExtensionPopup] Received Name field from page:', nameField);
-              setPageContext(response.pageContext || "LeanIX IT Component");
               processNameField(nameField);
             } else {
               console.log('[ExtensionPopup] No Name field found on page');
@@ -255,14 +240,15 @@ export const ExtensionPopup = () => {
       // Name is valid - auto-approve and use as anchor
       console.log('[ExtensionPopup] Name format valid, auto-approving:', currentName);
       setApprovedComponentName(currentName);
+      const guidance = workflowType ? getNameFormatGuidance(workflowType) : 'Name already matches the expected format';
       setRecommendations([{ 
         ...nameField, 
         recommendation: currentName,
         confidence: 1,
-        reasoning: 'Name already matches the expected format: [Provider] + [Product] + [Version]',
+        reasoning: `Name already matches the expected format: ${guidance}`,
         isLoading: false 
       }]);
-      toast.success(`Component identified: ${currentName}`);
+      toast.success(`${workflowType === 'application' ? 'Application' : 'Component'} identified: ${currentName}`);
     } else if (currentName) {
       // Name exists but doesn't match format - show for correction
       console.log('[ExtensionPopup] Name format invalid, needs correction:', currentName);
@@ -285,6 +271,8 @@ export const ExtensionPopup = () => {
   };
 
   const handleGenerateRecommendations = async () => {
+    if (!workflowType) return;
+    
     console.log('Generate recommendations clicked!');
     setIsAnalyzing(true);
     
@@ -299,7 +287,7 @@ export const ExtensionPopup = () => {
       }));
 
       // Pass the approved component name and cached URLs to anchor all searches
-      const result = await generateRecommendations(fieldsToAnalyze, pageContext, approvedComponentName || undefined, urlCache, workflowType || 'itc');
+      const result = await generateRecommendations(fieldsToAnalyze, pageContext, approvedComponentName || undefined, urlCache, workflowType);
 
       // Update URL cache if new URLs were returned
       if (result.cachedUrls) {
@@ -342,11 +330,12 @@ export const ExtensionPopup = () => {
         console.log('[ExtensionPopup] Name format valid, setting approved component name:', value);
         setApprovedComponentName(value);
         setNameFieldStatus('valid');
-        toast.success(`Component name approved: ${value}`);
+        toast.success(`${workflowType === 'application' ? 'Application' : 'Component'} name approved: ${value}`);
       } else {
         console.log('[ExtensionPopup] Name format invalid:', value);
         setNameFieldStatus('invalid');
-        toast.warning('Name format should be: [Provider] + [Product] + [Version]');
+        const guidance = workflowType ? getNameFormatGuidance(workflowType) : '[Provider] + [Product] + [Version]';
+        toast.warning(`Name format should be: ${guidance}`);
       }
     }
     
@@ -417,15 +406,23 @@ export const ExtensionPopup = () => {
   };
 
   const handleStartOver = () => {
+    setWorkflowType(null);
     setRecommendations([]);
     setApprovedComponentName(null);
     setActiveFieldId(null);
     setNameFieldStatus('pending');
-    setUrlCache({}); // Clear URL cache when starting over
-    // Reload name field from page
-    loadNameField();
-    toast.success("Starting over - Name field reloaded");
+    setUrlCache({});
+    toast.success("Starting over - select a workflow");
   };
+
+  // Show workflow selector if no workflow is selected
+  if (!workflowType) {
+    return (
+      <div className="extension-popup flex flex-col bg-background overflow-hidden rounded-lg border border-border shadow-lg">
+        <WorkflowSelector onSelect={handleWorkflowSelect} />
+      </div>
+    );
+  }
 
   return (
     <div className="extension-popup flex flex-col bg-background overflow-hidden rounded-lg border border-border shadow-lg">
