@@ -2,7 +2,9 @@ import { useState, useEffect, useCallback } from "react";
 import { Header } from "./Header";
 import { SettingsPanel } from "./SettingsPanel";
 import { RecommendationList, FieldRecommendation } from "./RecommendationList";
+import { WorkflowSelector, WorkflowType } from "./WorkflowSelector";
 import { generateRecommendations, FieldData, GenerateRecommendationsResult } from "@/lib/api";
+import { isValidNameFormat, getPageContext, getNameFormatGuidance } from "@/lib/workflow-config";
 import { toast } from "sonner";
 
 // Declare chrome as a global for TypeScript
@@ -20,25 +22,31 @@ const MOCK_FIELDS: FieldData[] = [
   },
 ];
 
-// Check if name matches the expected format: Provider + Product + Version
-// Examples: "MongoDB Community Server 8.2", "Google Angular 20.0", "Microsoft SQL Server 2022"
-function isValidComponentNameFormat(name: string): boolean {
-  if (!name || name.trim().length < 3) return false;
-  
-  // Should have at least 2 parts (provider/product and version)
-  const parts = name.trim().split(/\s+/);
-  if (parts.length < 2) return false;
-  
-  // Check if last part looks like a version (contains number)
-  const lastPart = parts[parts.length - 1];
-  const hasVersion = /\d/.test(lastPart);
-  
-  // Check if first part looks like a provider name (capitalized)
-  const firstPart = parts[0];
-  const hasProvider = /^[A-Z]/.test(firstPart);
-  
-  return hasVersion && hasProvider;
-}
+export const ExtensionPopup = () => {
+  const [workflowType, setWorkflowType] = useState<WorkflowType | null>(null);
+  const [showSettings, setShowSettings] = useState(false);
+  const [apiKeyConfigured, setApiKeyConfigured] = useState(true);
+  const [recommendations, setRecommendations] = useState<FieldRecommendation[]>([]);
+  const [isAnalyzing, setIsAnalyzing] = useState(false);
+  const [pageContext, setPageContext] = useState("LeanIX IT Component");
+  const [activeFieldId, setActiveFieldId] = useState<string | null>(null);
+  const [approvedComponentName, setApprovedComponentName] = useState<string | null>(null);
+  const [nameFieldStatus, setNameFieldStatus] = useState<'pending' | 'valid' | 'invalid'>('pending');
+  const [urlCache, setUrlCache] = useState<Record<string, string[]>>({});
+
+  // Handle workflow selection
+  const handleWorkflowSelect = (workflow: WorkflowType) => {
+    setWorkflowType(workflow);
+    setPageContext(getPageContext(workflow));
+    toast.success(`${workflow === 'itc' ? 'IT Component' : 'Application'} workflow selected`);
+    loadNameField();
+  };
+
+  // Check if name matches the expected format based on workflow
+  const isValidComponentNameFormat = (name: string): boolean => {
+    if (!workflowType) return false;
+    return isValidNameFormat(name, workflowType);
+  };
 
 export const ExtensionPopup = () => {
   const [showSettings, setShowSettings] = useState(false);
@@ -63,7 +71,7 @@ export const ExtensionPopup = () => {
 
     try {
       // Pass the approved component name and cached URLs to anchor the search
-      const result = await generateRecommendations([field], pageContext, approvedComponentName || undefined, urlCache);
+      const result = await generateRecommendations([field], pageContext, approvedComponentName || undefined, urlCache, workflowType || 'itc');
       const rec = result.recommendations.find(r => r.fieldId === field.fieldId);
       
       // Update URL cache if new URLs were returned
@@ -291,7 +299,7 @@ export const ExtensionPopup = () => {
       }));
 
       // Pass the approved component name and cached URLs to anchor all searches
-      const result = await generateRecommendations(fieldsToAnalyze, pageContext, approvedComponentName || undefined, urlCache);
+      const result = await generateRecommendations(fieldsToAnalyze, pageContext, approvedComponentName || undefined, urlCache, workflowType || 'itc');
 
       // Update URL cache if new URLs were returned
       if (result.cachedUrls) {
