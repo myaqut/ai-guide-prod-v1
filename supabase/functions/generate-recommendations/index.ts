@@ -1261,9 +1261,11 @@ serve(async (req) => {
 
       if (isApplicationWorkflow) {
         // APPLICATION WORKFLOW: Search for SaaS-specific fields
-        // When productUrlDomain is provided, enforce domain-only searches (except for G2 Category)
-        const enforceOfficialDomain = !!productUrlDomain;
-        console.log(`[Application] Enforce official domain only: ${enforceOfficialDomain}, domain: ${vendorDomainToUse}`);
+        // Enforce domain-only searches when EITHER:
+        // 1. productUrlDomain is provided (user gave a URL), OR
+        // 2. vendorDomainToUse was found from the vendor mapping (known vendor)
+        const enforceOfficialDomain = !!productUrlDomain || !!vendorDomainToUse;
+        console.log(`[Application] Enforce official domain only: ${enforceOfficialDomain}, domain: ${vendorDomainToUse}, source: ${productUrlDomain ? 'productUrl' : (vendorDomainToUse ? 'vendorMapping' : 'none')}`);
 
         for (const field of fields) {
           const needsSearch = isApplicationSearchField(field.fieldName);
