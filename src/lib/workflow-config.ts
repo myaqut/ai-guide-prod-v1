@@ -54,34 +54,43 @@ export function getPageContext(workflow: WorkflowType): string {
 }
 
 // Name validation patterns differ by workflow
+// New format: [Company Name] + [Component/Application Name] (+ [Version] for ITC)
 export function isValidNameFormat(name: string, workflow: WorkflowType): boolean {
   if (!name || name.trim().length < 3) return false;
   
+  const parts = name.trim().split(/\s+/);
+  
+  // Must have at least 2 parts (Company + Product)
+  if (parts.length < 2) return false;
+  
+  // First part should be capitalized (company name)
+  const hasCompany = /^[A-Z]/.test(parts[0]);
+  if (!hasCompany) return false;
+  
   if (workflow === 'itc') {
-    // ITC: Provider + Product + Version pattern
-    const parts = name.trim().split(/\s+/);
-    if (parts.length < 2) return false;
-    
+    // ITC: Company + Product + Version pattern (version can be numbers, x.x format, or year)
+    // Examples: "Microsoft SQL Server 2022", "MongoDB Community Server 8.2", "Apache Kafka 3.6.0"
     const lastPart = parts[parts.length - 1];
     const hasVersion = /\d/.test(lastPart);
-    const firstPart = parts[0];
-    const hasProvider = /^[A-Z]/.test(firstPart);
-    
-    return hasVersion && hasProvider;
+    return hasVersion;
   } else {
-    // Application: Just needs a proper name (capitalized, at least 2 words or 5 chars)
-    const parts = name.trim().split(/\s+/);
-    const hasCapital = /^[A-Z]/.test(parts[0]);
-    const hasMinLength = name.trim().length >= 5;
-    
-    return hasCapital && hasMinLength;
+    // Application: Company + Product Name (no version needed for SaaS)
+    // Examples: "Salesforce Sales Cloud", "Microsoft Teams", "Slack Enterprise Grid"
+    return parts.length >= 2 && name.trim().length >= 5;
   }
 }
 
 export function getNameFormatGuidance(workflow: WorkflowType): string {
   if (workflow === 'itc') {
-    return 'Name should follow: [Provider] + [Product] + [Version]. Example: "Microsoft SQL Server 2022"';
+    return 'Name should follow: [Company] + [Product] + [Version]. Example: "Microsoft SQL Server 2022"';
   } else {
-    return 'Name should be the official application name. Example: "Salesforce Sales Cloud" or "Microsoft Teams"';
+    return 'Name should follow: [Company] + [Product]. Example: "Salesforce Sales Cloud" or "Microsoft Teams"';
   }
+}
+
+// Extract company name from the component/application name
+export function extractCompanyName(name: string): string | null {
+  if (!name || name.trim().length < 2) return null;
+  const parts = name.trim().split(/\s+/);
+  return parts[0] || null;
 }

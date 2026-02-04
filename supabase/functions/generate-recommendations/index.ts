@@ -550,15 +550,17 @@ ${vendorDomain ? `7. The official domain is ${vendorDomain} - flag if you're NOT
 }
 
 // Main search function: Two-phase approach - Official first, then fallback
-async function searchFieldInfo(componentName: string, fieldName: string): Promise<PerplexitySearchResult | null> {
+// Now accepts optional productUrlDomain to prioritize searches
+async function searchFieldInfo(componentName: string, fieldName: string, productUrlDomain?: string | null): Promise<PerplexitySearchResult | null> {
   if (!PERPLEXITY_API_KEY) {
     console.log('Perplexity API key not configured, skipping web search');
     return null;
   }
 
-  const vendorDomain = extractVendorDomain(componentName);
+  // Prefer productUrlDomain if provided, otherwise extract from component name
+  const vendorDomain = productUrlDomain || extractVendorDomain(componentName);
   console.log(`\n=== Two-Phase Search for ${fieldName} ===`);
-  console.log(`Component: ${componentName}, Vendor Domain: ${vendorDomain || 'unknown'}`);
+  console.log(`Component: ${componentName}, Vendor Domain: ${vendorDomain || 'unknown'} (from ${productUrlDomain ? 'product URL' : 'component name'})`);
 
   // PHASE 1: Try official sources only (if we know the vendor)
   if (vendorDomain) {
@@ -648,14 +650,27 @@ serve(async (req) => {
       );
     }
 
-    const { fields, pageContext, componentName: passedComponentName, cachedUrls: passedCachedUrls, workflowType = 'itc' } = await req.json();
+    const { fields, pageContext, componentName: passedComponentName, cachedUrls: passedCachedUrls, workflowType = 'itc', productUrl } = await req.json();
     console.log('Received fields:', fields);
     console.log('Page context:', pageContext);
     console.log('Passed component name:', passedComponentName);
     console.log('Received cached URLs:', passedCachedUrls);
     console.log('Workflow type:', workflowType);
+    console.log('Product URL:', productUrl);
 
     const isApplicationWorkflow = workflowType === 'application';
+
+    // Extract domain from productUrl if provided (for prioritized search)
+    let productUrlDomain: string | null = null;
+    if (productUrl) {
+      try {
+        const urlObj = new URL(productUrl);
+        productUrlDomain = urlObj.hostname.replace(/^www\./, '');
+        console.log('Extracted product URL domain:', productUrlDomain);
+      } catch (e) {
+        console.log('Could not parse product URL:', e);
+      }
+    }
 
     if (!fields || !Array.isArray(fields)) {
       return new Response(
@@ -710,6 +725,10 @@ serve(async (req) => {
     let searchResults: Record<string, PerplexitySearchResult | null> = {};
     
     if (componentName) {
+      // Use productUrlDomain if available, otherwise extract from component name
+      const vendorDomainToUse = productUrlDomain || extractVendorDomain(componentName);
+      console.log('Using vendor domain for searches:', vendorDomainToUse);
+
       if (isApplicationWorkflow) {
         // APPLICATION WORKFLOW: Search for SaaS-specific fields
         for (const field of fields) {
@@ -717,11 +736,10 @@ serve(async (req) => {
           
           if (needsSearch) {
             console.log(`[Application] Searching info for field: ${field.fieldName}`);
-            const vendorDomain = extractVendorDomain(componentName);
-            const searchQuery = buildApplicationSearchQuery(componentName, field.fieldName, vendorDomain || undefined);
+            const searchQuery = buildApplicationSearchQuery(componentName, field.fieldName, vendorDomainToUse || undefined);
             
             // Use fallback search for applications (broader sources acceptable)
-            const result = await searchFallback(componentName, field.fieldName, vendorDomain);
+            const result = await searchFallback(componentName, field.fieldName, vendorDomainToUse);
             searchResults[field.fieldId] = result;
           }
         }
@@ -749,7 +767,7 @@ serve(async (req) => {
           
           if (needsSearch) {
             console.log(`Searching info for field: ${field.fieldName}`);
-            const result = await searchFieldInfo(componentName, field.fieldName);
+            const result = await searchFieldInfo(componentName, field.fieldName, vendorDomainToUse);
             searchResults[field.fieldId] = result;
             
             // Cache URLs for date fields so URL fields can reuse them

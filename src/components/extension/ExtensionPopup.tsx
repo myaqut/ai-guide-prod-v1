@@ -3,6 +3,7 @@ import { Header } from "./Header";
 import { SettingsPanel } from "./SettingsPanel";
 import { RecommendationList, FieldRecommendation } from "./RecommendationList";
 import { WorkflowSelector, WorkflowType } from "./WorkflowSelector";
+import { EntryForm } from "./EntryForm";
 import { generateRecommendations, FieldData, GenerateRecommendationsResult } from "@/lib/api";
 import { isValidNameFormat, getPageContext, getNameFormatGuidance } from "@/lib/workflow-config";
 import { toast } from "sonner";
@@ -24,6 +25,7 @@ const MOCK_FIELDS: FieldData[] = [
 
 export const ExtensionPopup = () => {
   const [workflowType, setWorkflowType] = useState<WorkflowType | null>(null);
+  const [showEntryForm, setShowEntryForm] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
   const [apiKeyConfigured, setApiKeyConfigured] = useState(true);
   const [recommendations, setRecommendations] = useState<FieldRecommendation[]>([]);
@@ -31,15 +33,40 @@ export const ExtensionPopup = () => {
   const [pageContext, setPageContext] = useState("LeanIX IT Component");
   const [activeFieldId, setActiveFieldId] = useState<string | null>(null);
   const [approvedComponentName, setApprovedComponentName] = useState<string | null>(null);
+  const [productUrl, setProductUrl] = useState<string | undefined>(undefined);
   const [nameFieldStatus, setNameFieldStatus] = useState<'pending' | 'valid' | 'invalid'>('pending');
   const [urlCache, setUrlCache] = useState<Record<string, string[]>>({});
 
-  // Handle workflow selection
+  // Handle workflow selection - show entry form next
   const handleWorkflowSelect = (workflow: WorkflowType) => {
     setWorkflowType(workflow);
     setPageContext(getPageContext(workflow));
+    setShowEntryForm(true);
     toast.success(`${workflow === 'itc' ? 'IT Component' : 'Application'} workflow selected`);
-    loadNameField();
+  };
+
+  // Handle entry form submission - now we have name and optional URL
+  const handleEntrySubmit = (name: string, url?: string) => {
+    console.log('[ExtensionPopup] Entry submitted - Name:', name, 'URL:', url);
+    setApprovedComponentName(name);
+    setProductUrl(url);
+    setNameFieldStatus('valid');
+    setShowEntryForm(false);
+    
+    // Initialize with the name field already set
+    const nameField: FieldRecommendation = {
+      fieldId: 'name',
+      fieldName: 'Name',
+      currentValue: name,
+      recommendation: name,
+      confidence: 1,
+      reasoning: 'Name provided by user at start of cataloging process',
+      isLoading: false
+    };
+    setRecommendations([nameField]);
+    
+    const entityLabel = workflowType === 'application' ? 'Application' : 'Component';
+    toast.success(`${entityLabel} identified: ${name}`);
   };
 
   // Check if name matches the expected format based on workflow
@@ -61,8 +88,8 @@ export const ExtensionPopup = () => {
     );
 
     try {
-      // Pass the approved component name and cached URLs to anchor the search
-      const result = await generateRecommendations([field], pageContext, approvedComponentName || undefined, urlCache, workflowType);
+      // Pass the approved component name, cached URLs, and product URL to anchor the search
+      const result = await generateRecommendations([field], pageContext, approvedComponentName || undefined, urlCache, workflowType, productUrl);
       const rec = result.recommendations.find(r => r.fieldId === field.fieldId);
       
       // Update URL cache if new URLs were returned
@@ -94,7 +121,7 @@ export const ExtensionPopup = () => {
       );
       toast.error(`Failed to get recommendation for ${field.fieldName}`);
     }
-  }, [pageContext, approvedComponentName, urlCache, workflowType]);
+  }, [pageContext, approvedComponentName, urlCache, workflowType, productUrl]);
 
   // Handle active field change from content script - fetch recommendation for that field only
   const handleActiveFieldChange = useCallback((field: FieldData) => {
@@ -286,8 +313,8 @@ export const ExtensionPopup = () => {
         currentValue: r.currentValue,
       }));
 
-      // Pass the approved component name and cached URLs to anchor all searches
-      const result = await generateRecommendations(fieldsToAnalyze, pageContext, approvedComponentName || undefined, urlCache, workflowType);
+      // Pass the approved component name, cached URLs, and product URL to anchor all searches
+      const result = await generateRecommendations(fieldsToAnalyze, pageContext, approvedComponentName || undefined, urlCache, workflowType, productUrl);
 
       // Update URL cache if new URLs were returned
       if (result.cachedUrls) {
@@ -407,8 +434,10 @@ export const ExtensionPopup = () => {
 
   const handleStartOver = () => {
     setWorkflowType(null);
+    setShowEntryForm(false);
     setRecommendations([]);
     setApprovedComponentName(null);
+    setProductUrl(undefined);
     setActiveFieldId(null);
     setNameFieldStatus('pending');
     setUrlCache({});
@@ -420,6 +449,22 @@ export const ExtensionPopup = () => {
     return (
       <div className="extension-popup flex flex-col bg-background overflow-hidden rounded-lg border border-border shadow-lg">
         <WorkflowSelector onSelect={handleWorkflowSelect} />
+      </div>
+    );
+  }
+
+  // Show entry form after workflow selection
+  if (showEntryForm) {
+    return (
+      <div className="extension-popup flex flex-col bg-background overflow-hidden rounded-lg border border-border shadow-lg">
+        <EntryForm 
+          workflowType={workflowType}
+          onSubmit={handleEntrySubmit}
+          onBack={() => {
+            setWorkflowType(null);
+            setShowEntryForm(false);
+          }}
+        />
       </div>
     );
   }
