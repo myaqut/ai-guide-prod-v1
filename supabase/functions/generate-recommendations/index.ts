@@ -63,6 +63,7 @@ interface RecommendationResponse {
   recommendation: string;
   confidence: number;
   reasoning: string;
+  isOfficialSource?: boolean;
 }
 
 interface PerplexitySearchResult {
@@ -1500,12 +1501,21 @@ Provide recommendations with appropriate professional values for all fields. Ret
       );
     }
 
-    console.log('Parsed recommendations:', recommendations);
+    // Enrich recommendations with isOfficialSource from search results
+    const enrichedRecommendations = recommendations.map(rec => {
+      const searchResult = searchResults[rec.fieldId] as PerplexitySearchResultWithQuality | null;
+      return {
+        ...rec,
+        isOfficialSource: searchResult?.isOfficialSource ?? false
+      };
+    });
+
+    console.log('Parsed recommendations:', enrichedRecommendations);
 
     // Return recommendations along with any newly cached URLs so frontend can store them
     return new Response(
       JSON.stringify({ 
-        recommendations,
+        recommendations: enrichedRecommendations,
         cachedUrls: dateFieldUrlCache  // Return cached URLs so frontend can pass them in future requests
       }),
       { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
