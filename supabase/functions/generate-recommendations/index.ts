@@ -1,5 +1,6 @@
 import "https://deno.land/x/xhr@0.1.0/mod.ts";
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
+import { z } from "https://deno.land/x/zod@v3.22.4/mod.ts";
 
 const LOVABLE_API_KEY = Deno.env.get('LOVABLE_API_KEY');
 const PERPLEXITY_API_KEY = Deno.env.get('PERPLEXITY_API_KEY');
@@ -8,6 +9,43 @@ const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 };
+
+// =====================
+// Input Validation Schemas
+// =====================
+
+const FieldDataSchema = z.object({
+  fieldId: z.string().max(100, 'fieldId must be at most 100 characters'),
+  fieldName: z.string().max(200, 'fieldName must be at most 200 characters'),
+  currentValue: z.string().max(2000, 'currentValue must be at most 2000 characters').optional(),
+});
+
+const CachedUrlsSchema = z.record(
+  z.string().max(100),
+  z.array(z.string().max(2000)).max(20)
+).optional();
+
+const RequestSchema = z.object({
+  fields: z.array(FieldDataSchema).max(50, 'Cannot process more than 50 fields at once'),
+  pageContext: z.string().max(500, 'pageContext must be at most 500 characters').optional(),
+  componentName: z.string().max(300, 'componentName must be at most 300 characters').optional(),
+  cachedUrls: CachedUrlsSchema,
+  workflowType: z.enum(['itc', 'application']).default('itc'),
+  productUrl: z.string().max(2000, 'productUrl must be at most 2000 characters').optional().refine(
+    (url) => !url || isValidUrl(url),
+    { message: 'productUrl must be a valid URL' }
+  ),
+});
+
+// Helper to validate URL format
+function isValidUrl(str: string): boolean {
+  try {
+    const url = new URL(str);
+    return url.protocol === 'http:' || url.protocol === 'https:';
+  } catch {
+    return false;
+  }
+}
 
 // Workflow types
 type WorkflowType = 'itc' | 'application';
@@ -650,13 +688,37 @@ serve(async (req) => {
       );
     }
 
-    const { fields, pageContext, componentName: passedComponentName, cachedUrls: passedCachedUrls, workflowType = 'itc', productUrl } = await req.json();
-    console.log('Received fields:', fields);
-    console.log('Page context:', pageContext);
-    console.log('Passed component name:', passedComponentName);
-    console.log('Received cached URLs:', passedCachedUrls);
+    // Parse and validate request body
+    let rawBody;
+    try {
+      rawBody = await req.json();
+    } catch {
+      return new Response(
+        JSON.stringify({ error: 'Invalid JSON in request body' }),
+        { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
+
+    const validationResult = RequestSchema.safeParse(rawBody);
+    if (!validationResult.success) {
+      console.error('Input validation failed:', validationResult.error.flatten());
+      return new Response(
+        JSON.stringify({ 
+          error: 'Invalid request format', 
+          details: validationResult.error.flatten().fieldErrors 
+        }),
+        { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
+
+    const { fields, pageContext, componentName: passedComponentName, cachedUrls: passedCachedUrls, workflowType, productUrl } = validationResult.data;
+    
+    // Log validated input (safe to log now)
+    console.log('Validated fields count:', fields.length);
+    console.log('Page context:', pageContext?.substring(0, 100));
+    console.log('Passed component name:', passedComponentName?.substring(0, 100));
     console.log('Workflow type:', workflowType);
-    console.log('Product URL:', productUrl);
+    console.log('Product URL:', productUrl?.substring(0, 100));
 
     const isApplicationWorkflow = workflowType === 'application';
 
@@ -670,13 +732,6 @@ serve(async (req) => {
       } catch (e) {
         console.log('Could not parse product URL:', e);
       }
-    }
-
-    if (!fields || !Array.isArray(fields)) {
-      return new Response(
-        JSON.stringify({ error: 'Fields array is required' }),
-        { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-      );
     }
 
     // Use passed component name (approved earlier), or fall back to extracting from fields
