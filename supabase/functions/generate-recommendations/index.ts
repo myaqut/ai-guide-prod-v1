@@ -47,6 +47,88 @@ function isValidUrl(str: string): boolean {
   }
 }
 
+// =====================
+// URL Accessibility Validation
+// =====================
+
+// Validate URL is accessible with a HEAD request (timeout: 5 seconds)
+async function isUrlAccessible(url: string): Promise<boolean> {
+  if (!isValidUrl(url)) return false;
+  
+  try {
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 5000);
+    
+    const response = await fetch(url, {
+      method: 'HEAD',
+      signal: controller.signal,
+      headers: {
+        'User-Agent': 'Mozilla/5.0 (compatible; LeanIX-Catalog-Assistant/1.0)',
+      },
+      redirect: 'follow',
+    });
+    
+    clearTimeout(timeoutId);
+    
+    // Accept 2xx and 3xx status codes as valid
+    const isValid = response.status >= 200 && response.status < 400;
+    console.log(`[URL Validation] ${url} -> ${response.status} (${isValid ? 'valid' : 'invalid'})`);
+    return isValid;
+  } catch (error) {
+    // Try GET request as fallback (some servers block HEAD)
+    try {
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 5000);
+      
+      const response = await fetch(url, {
+        method: 'GET',
+        signal: controller.signal,
+        headers: {
+          'User-Agent': 'Mozilla/5.0 (compatible; LeanIX-Catalog-Assistant/1.0)',
+          'Range': 'bytes=0-0', // Only fetch first byte to minimize data transfer
+        },
+        redirect: 'follow',
+      });
+      
+      clearTimeout(timeoutId);
+      
+      const isValid = response.status >= 200 && response.status < 400;
+      console.log(`[URL Validation GET fallback] ${url} -> ${response.status} (${isValid ? 'valid' : 'invalid'})`);
+      return isValid;
+    } catch (getError) {
+      console.log(`[URL Validation] ${url} -> failed (${error instanceof Error ? error.message : 'unknown error'})`);
+      return false;
+    }
+  }
+}
+
+// Validate multiple URLs in parallel with concurrency limit
+async function validateUrls(urls: string[], maxConcurrent: number = 3): Promise<string[]> {
+  if (!urls || urls.length === 0) return [];
+  
+  const validatedUrls: string[] = [];
+  
+  // Process URLs in batches to limit concurrency
+  for (let i = 0; i < urls.length; i += maxConcurrent) {
+    const batch = urls.slice(i, i + maxConcurrent);
+    const results = await Promise.all(
+      batch.map(async (url) => {
+        const isValid = await isUrlAccessible(url);
+        return { url, isValid };
+      })
+    );
+    
+    for (const { url, isValid } of results) {
+      if (isValid) {
+        validatedUrls.push(url);
+      }
+    }
+  }
+  
+  console.log(`[URL Validation] Validated ${urls.length} URLs, ${validatedUrls.length} accessible`);
+  return validatedUrls;
+}
+
 // Workflow types
 type WorkflowType = 'itc' | 'application';
 
@@ -878,12 +960,20 @@ ${getVersionMatchingInstruction(componentName)}`
       return null;
     }
     
-    console.log(`[PHASE 1] SUCCESS - Found on official source ${vendorDomain}`);
-    console.log(`[PHASE 1] Official citations:`, officialCitations);
+    // Validate URLs are accessible (filter out 404s and broken links)
+    console.log(`[PHASE 1] Validating ${officialCitations.length} URLs...`);
+    const validatedUrls = await validateUrls(officialCitations, 3);
+    
+    if (validatedUrls.length === 0) {
+      console.log(`[PHASE 1] All URLs returned 404/inaccessible for ${fieldName}`);
+      return null;
+    }
+    
+    console.log(`[PHASE 1] SUCCESS - Found ${validatedUrls.length} accessible URLs from ${vendorDomain}`);
 
     return {
       content: `[VERIFIED FROM OFFICIAL SOURCE: ${vendorDomain}]\n\n${content}`,
-      urls: officialCitations,
+      urls: validatedUrls,
       isOfficialSource: true
     };
   } catch (error) {
@@ -957,12 +1047,36 @@ ${vendorDomain ? `7. The official domain is ${vendorDomain} - flag if you're NOT
     
     console.log(`[PHASE 2] Found ${citations.length} citations, official source: ${hasOfficialSource}`);
 
+    // Validate URLs are accessible (filter out 404s and broken links)
+    console.log(`[PHASE 2] Validating ${citations.length} URLs...`);
+    const validatedUrls = await validateUrls(citations, 3);
+    
+    if (validatedUrls.length === 0 && citations.length > 0) {
+      console.log(`[PHASE 2] All URLs returned 404/inaccessible for ${fieldName}`);
+      // Still return content but without URLs
+      return {
+        content: `[WARNING: Source URLs could not be verified]\n\n${content}`,
+        urls: [],
+        isOfficialSource: false
+      };
+    }
+    
+    // Re-check if any validated URL is from official domain
+    const hasValidatedOfficialSource = vendorDomain && validatedUrls.some((url: string) => {
+      try {
+        const urlObj = new URL(url);
+        return urlObj.hostname.endsWith(domainBase) || urlObj.hostname === domainBase;
+      } catch {
+        return url.includes(domainBase);
+      }
+    });
+
     return {
-      content: hasOfficialSource 
+      content: hasValidatedOfficialSource 
         ? content 
         : `[WARNING: NOT FROM OFFICIAL VENDOR WEBSITE - Use with caution]\n\n${content}`,
-      urls: citations,
-      isOfficialSource: hasOfficialSource || false
+      urls: validatedUrls,
+      isOfficialSource: hasValidatedOfficialSource || false
     };
   } catch (error) {
     console.error('[PHASE 2] Error:', error);
@@ -1029,9 +1143,12 @@ RULES:
     
     console.log(`[G2 Category] Found ${citations.length} citations`);
 
+    // Validate G2 URLs are accessible
+    const validatedUrls = await validateUrls(citations, 2);
+
     return {
       content: `[G2.COM CATEGORY SEARCH]\n\n${content}`,
-      urls: citations,
+      urls: validatedUrls,
       isOfficialSource: true // G2 is the authoritative source for G2 categories
     };
   } catch (error) {
@@ -1172,10 +1289,15 @@ ${enforceOfficialDomain && vendorDomain ? `\nONLY use URLs from ${vendorDomain}`
     
     console.log(`[API URL] Found ${citations.length} citations`);
 
+    // Validate API documentation URLs are accessible - critical for URL fields
+    const validatedUrls = await validateUrls(citations, 2);
+
     return {
-      content: `[API DOCUMENTATION SEARCH]\n\n${content}`,
-      urls: citations,
-      isOfficialSource: enforceOfficialDomain
+      content: validatedUrls.length > 0 
+        ? `[API DOCUMENTATION SEARCH]\n\n${content}`
+        : `[API DOCUMENTATION SEARCH - URLs could not be verified]\n\n${content}`,
+      urls: validatedUrls,
+      isOfficialSource: enforceOfficialDomain && validatedUrls.length > 0
     };
   } catch (error) {
     console.error('[API URL] Error:', error);
@@ -1239,10 +1361,15 @@ ${enforceOfficialDomain && vendorDomain ? `\nONLY use URLs from ${vendorDomain}`
     
     console.log(`[Login URL] Found ${citations.length} citations`);
 
+    // Validate Login URLs are accessible - critical for URL fields
+    const validatedUrls = await validateUrls(citations, 2);
+
     return {
-      content: `[LOGIN URL SEARCH]\n\n${content}`,
-      urls: citations,
-      isOfficialSource: enforceOfficialDomain
+      content: validatedUrls.length > 0
+        ? `[LOGIN URL SEARCH]\n\n${content}`
+        : `[LOGIN URL SEARCH - URLs could not be verified]\n\n${content}`,
+      urls: validatedUrls,
+      isOfficialSource: enforceOfficialDomain && validatedUrls.length > 0
     };
   } catch (error) {
     console.error('[Login URL] Error:', error);
