@@ -4,7 +4,7 @@ import { SettingsPanel } from "./SettingsPanel";
 import { RecommendationList, FieldRecommendation } from "./RecommendationList";
 import { WorkflowSelector, WorkflowType } from "./WorkflowSelector";
 import { EntryForm } from "./EntryForm";
-import { PerplexityChat } from "./PerplexityChat";
+import { PerplexityChat, ChatMessage } from "./PerplexityChat";
 import { AuthScreen } from "./AuthScreen";
 import { generateRecommendations, FieldData, GenerateRecommendationsResult } from "@/lib/api";
 import { isValidNameFormat, getPageContext, getNameFormatGuidance, getWorkflowLabel } from "@/lib/workflow-config";
@@ -60,6 +60,9 @@ export const ExtensionPopup = () => {
   
   // Chat tab visibility (can be closed and reopened)
   const [showChatTab, setShowChatTab] = useState(false);
+  
+  // Persistent chat messages state
+  const [chatMessages, setChatMessages] = useState<ChatMessage[]>([]);
   
   // Settings panel visibility
   const [showSettings, setShowSettings] = useState(false);
@@ -761,7 +764,9 @@ export const ExtensionPopup = () => {
           )}>
             <PerplexityChat 
               embedded={showBottomTabs}
-              onBack={!showBottomTabs ? () => setActiveTab(hasAnyCatalogSession ? (hasItcSession ? 'itc' : 'application') : 'workflow') : undefined} 
+              onBack={!showBottomTabs ? () => setActiveTab(hasAnyCatalogSession ? (hasItcSession ? 'itc' : 'application') : 'workflow') : undefined}
+              messages={chatMessages}
+              onMessagesChange={setChatMessages}
             />
           </div>
         )}

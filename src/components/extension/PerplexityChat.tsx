@@ -8,7 +8,7 @@ import { toast } from "sonner";
 import ReactMarkdown from "react-markdown";
 import { cn } from "@/lib/utils";
 
-interface ChatMessage {
+export interface ChatMessage {
   role: 'user' | 'assistant';
   content: string;
   citations?: string[];
@@ -18,6 +18,8 @@ interface ChatMessage {
 interface PerplexityChatProps {
   onBack?: () => void;
   embedded?: boolean; // When true, fits within parent container without its own chrome
+  messages?: ChatMessage[];
+  onMessagesChange?: (messages: ChatMessage[]) => void;
 }
 
 // Animated typing dots
@@ -201,8 +203,12 @@ const SuggestionCard = ({ text, onClick, delay }: { text: string; onClick: () =>
   </button>
 );
 
-export const PerplexityChat = ({ onBack, embedded = false }: PerplexityChatProps) => {
-  const [messages, setMessages] = useState<ChatMessage[]>([]);
+export const PerplexityChat = ({ onBack, embedded = false, messages: externalMessages, onMessagesChange }: PerplexityChatProps) => {
+  // Use external state if provided, otherwise fall back to internal state
+  const [internalMessages, setInternalMessages] = useState<ChatMessage[]>([]);
+  const messages = externalMessages ?? internalMessages;
+  const setMessages = onMessagesChange ?? setInternalMessages;
+  
   const [input, setInput] = useState("");
   const [isLoading, setIsLoading] = useState(false);
   const [domainFilter, setDomainFilter] = useState("");
