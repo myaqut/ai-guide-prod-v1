@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Check, Copy, ChevronDown, ChevronUp, Lightbulb, RefreshCw, Pencil, X, Trash2 } from "lucide-react";
+import { Check, Copy, ChevronDown, ChevronUp, Lightbulb, RefreshCw, Pencil, X, Trash2, ShieldCheck, Globe } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
@@ -13,6 +13,7 @@ interface FieldCardProps {
   reasoning?: string;
   isLoading?: boolean;
   isActive?: boolean;
+  isOfficialSource?: boolean;
   onApply?: (value: string) => void;
   onRefresh?: () => void;
   onEditValue?: (value: string) => void;
@@ -28,6 +29,7 @@ export const FieldCard = ({
   reasoning,
   isLoading,
   isActive,
+  isOfficialSource,
   onApply,
   onRefresh,
   onEditValue,
@@ -123,11 +125,35 @@ export const FieldCard = ({
             </p>
           )}
         </div>
-        {confidence !== undefined && (
-          <div className={cn("text-[10px] font-medium px-1.5 py-0.5 rounded bg-muted", getConfidenceColor(confidence))}>
-            {getConfidenceLabel(confidence)} ({Math.round(confidence * 100)}%)
-          </div>
-        )}
+        <div className="flex items-center gap-1.5">
+          {/* Source badge */}
+          {recommendation && isOfficialSource !== undefined && (
+            <div className={cn(
+              "text-[10px] font-medium px-1.5 py-0.5 rounded flex items-center gap-1",
+              isOfficialSource 
+                ? "bg-success/10 text-success" 
+                : "bg-muted text-muted-foreground"
+            )}>
+              {isOfficialSource ? (
+                <>
+                  <ShieldCheck className="w-3 h-3" />
+                  Official
+                </>
+              ) : (
+                <>
+                  <Globe className="w-3 h-3" />
+                  Web
+                </>
+              )}
+            </div>
+          )}
+          {/* Confidence badge */}
+          {confidence !== undefined && (
+            <div className={cn("text-[10px] font-medium px-1.5 py-0.5 rounded bg-muted", getConfidenceColor(confidence))}>
+              {getConfidenceLabel(confidence)} ({Math.round(confidence * 100)}%)
+            </div>
+          )}
+        </div>
       </div>
 
       {/* Recommendation */}

@@ -14,6 +14,7 @@ export interface Recommendation {
   recommendation: string;
   confidence: number;
   reasoning: string;
+  isOfficialSource?: boolean;
 }
 
 export interface GenerateRecommendationsResult {

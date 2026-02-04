@@ -10,6 +10,7 @@ export interface FieldRecommendation {
   confidence?: number;
   reasoning?: string;
   isLoading?: boolean;
+  isOfficialSource?: boolean;
 }
 
 interface RecommendationListProps {
@@ -102,6 +103,7 @@ export const RecommendationList = ({
               reasoning={rec.reasoning}
               isLoading={rec.isLoading}
               isActive={rec.fieldId === activeFieldId}
+              isOfficialSource={rec.isOfficialSource}
               onApply={(value) => onApply(rec.fieldId, value)}
               onRefresh={() => onRefreshField(rec.fieldId)}
               onEditValue={(value) => onEditValue(rec.fieldId, value)}
