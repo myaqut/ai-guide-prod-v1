@@ -773,6 +773,11 @@ export const ExtensionPopup = () => {
               onInputChange={setChatInput}
               domainFilter={chatDomainFilter}
               onDomainFilterChange={setChatDomainFilter}
+              onClearChat={() => {
+                setChatMessages([]);
+                setChatInput("");
+                setChatDomainFilter("");
+              }}
             />
           </div>
         )}

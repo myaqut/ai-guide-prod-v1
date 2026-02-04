@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect } from "react";
-import { Send, ArrowLeft, Loader2, ExternalLink, Sparkles, Globe, Copy, Check, MessageSquare } from "lucide-react";
+import { Send, ArrowLeft, Loader2, ExternalLink, Sparkles, Globe, Copy, Check, MessageSquare, RotateCcw } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { ScrollArea } from "@/components/ui/scroll-area";
@@ -24,6 +24,7 @@ interface PerplexityChatProps {
   onInputChange?: (input: string) => void;
   domainFilter?: string;
   onDomainFilterChange?: (filter: string) => void;
+  onClearChat?: () => void;
 }
 
 // Animated typing dots
@@ -215,7 +216,8 @@ export const PerplexityChat = ({
   input: externalInput,
   onInputChange,
   domainFilter: externalDomainFilter,
-  onDomainFilterChange
+  onDomainFilterChange,
+  onClearChat
 }: PerplexityChatProps) => {
   // Use external state if provided, otherwise fall back to internal state
   const [internalMessages, setInternalMessages] = useState<ChatMessage[]>([]);
@@ -235,6 +237,21 @@ export const PerplexityChat = ({
   const scrollRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
+
+  // Handle clearing the chat
+  const handleClearChat = () => {
+    if (onClearChat) {
+      onClearChat();
+    } else {
+      setMessages([]);
+      setInput("");
+      setDomainFilter("");
+    }
+    setShowDomainFilter(false);
+    toast.success("Chat cleared");
+  };
+
+  const hasContent = messages.length > 0 || input.trim() || domainFilter.trim();
 
   // Auto-scroll to bottom when new messages arrive
   const scrollToBottom = () => {
@@ -324,18 +341,31 @@ export const PerplexityChat = ({
             <Sparkles className="h-4 w-4 text-primary" />
             <span className="text-xs font-medium text-foreground">Research Chat</span>
           </div>
-          <Button
-            variant="ghost"
-            size="sm"
-            onClick={() => setShowDomainFilter(!showDomainFilter)}
-            className={cn(
-              "h-6 px-2 text-[10px] gap-1 transition-colors",
-              showDomainFilter || domainFilter ? "text-primary" : "text-muted-foreground"
+          <div className="flex items-center gap-1">
+            {hasContent && (
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={handleClearChat}
+                className="h-6 px-2 text-[10px] gap-1 text-muted-foreground hover:text-destructive transition-colors"
+                title="Clear chat"
+              >
+                <RotateCcw className="h-3 w-3" />
+              </Button>
             )}
-          >
-            <Globe className="h-3 w-3" />
-            Filter
-          </Button>
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => setShowDomainFilter(!showDomainFilter)}
+              className={cn(
+                "h-6 px-2 text-[10px] gap-1 transition-colors",
+                showDomainFilter || domainFilter ? "text-primary" : "text-muted-foreground"
+              )}
+            >
+              <Globe className="h-3 w-3" />
+              Filter
+            </Button>
+          </div>
         </div>
 
         {/* Domain Filter (Collapsible) */}
