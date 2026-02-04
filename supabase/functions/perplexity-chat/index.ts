@@ -1,5 +1,6 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.49.4';
+import { z } from "https://deno.land/x/zod@v3.22.4/mod.ts";
 
 const PERPLEXITY_API_KEY = Deno.env.get('PERPLEXITY_API_KEY');
 const SUPABASE_URL = Deno.env.get('SUPABASE_URL');
@@ -10,15 +11,21 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 };
 
-interface ChatMessage {
-  role: 'user' | 'assistant' | 'system';
-  content: string;
-}
+// =====================
+// Input Validation Schemas
+// =====================
 
-interface ChatRequest {
-  messages: ChatMessage[];
-  domainFilter?: string[];
-}
+const ChatMessageSchema = z.object({
+  role: z.enum(['user', 'assistant', 'system']),
+  content: z.string().max(10000, 'Message content must be at most 10,000 characters'),
+});
+
+const ChatRequestSchema = z.object({
+  messages: z.array(ChatMessageSchema).min(1, 'At least one message is required').max(50, 'Maximum 50 messages allowed'),
+  domainFilter: z.array(
+    z.string().max(100, 'Domain must be at most 100 characters')
+  ).max(10, 'Maximum 10 domains allowed').optional(),
+});
 
 // =====================
 // Authentication Helper
@@ -54,7 +61,7 @@ async function authenticateRequest(req: Request): Promise<{ userId: string } | {
   const { data, error } = await supabaseClient.auth.getUser(token);
 
   if (error || !data?.user) {
-    console.error('Authentication failed:', error?.message);
+    console.error('Authentication failed');
     return {
       error: new Response(
         JSON.stringify({ error: 'Unauthorized - invalid or expired token' }),
@@ -63,7 +70,6 @@ async function authenticateRequest(req: Request): Promise<{ userId: string } | {
     };
   }
 
-  console.log('[Auth] Request authenticated for user:', data.user.id);
   return { userId: data.user.id };
 }
 
@@ -88,20 +94,22 @@ serve(async (req) => {
       );
     }
 
-    const { messages, domainFilter }: ChatRequest = await req.json();
-
-    if (!messages || messages.length === 0) {
+    // Parse and validate request body
+    const rawBody = await req.json();
+    const parseResult = ChatRequestSchema.safeParse(rawBody);
+    
+    if (!parseResult.success) {
+      const errorMessage = parseResult.error.errors.map(e => e.message).join(', ');
       return new Response(
-        JSON.stringify({ error: 'Messages are required' }),
+        JSON.stringify({ error: `Validation error: ${errorMessage}` }),
         { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     }
 
-    console.log('[Perplexity Chat] Processing query with', messages.length, 'messages');
-    console.log('[Perplexity Chat] Domain filter:', domainFilter);
+    const { messages, domainFilter } = parseResult.data;
 
     // Build request body
-    const requestBody: any = {
+    const requestBody: Record<string, unknown> = {
       model: 'sonar',
       messages: [
         {
@@ -137,7 +145,7 @@ Always cite your sources with URLs when providing factual information.`
 
     if (!response.ok) {
       const errorText = await response.text();
-      console.error('[Perplexity Chat] API error:', response.status, errorText);
+      console.error('[Perplexity Chat] API error:', response.status);
       
       if (response.status === 429) {
         return new Response(
@@ -147,7 +155,7 @@ Always cite your sources with URLs when providing factual information.`
       }
       
       return new Response(
-        JSON.stringify({ error: 'Perplexity API error', details: errorText }),
+        JSON.stringify({ error: 'Perplexity API error' }),
         { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     }
@@ -156,8 +164,6 @@ Always cite your sources with URLs when providing factual information.`
     const content = data.choices?.[0]?.message?.content || '';
     const citations = data.citations || [];
     const relatedQuestions = data.related_questions || [];
-
-    console.log('[Perplexity Chat] Response received with', citations.length, 'citations');
 
     return new Response(
       JSON.stringify({
@@ -169,9 +175,9 @@ Always cite your sources with URLs when providing factual information.`
     );
 
   } catch (error) {
-    console.error('[Perplexity Chat] Error:', error);
+    console.error('[Perplexity Chat] Error:', error instanceof Error ? error.message : 'Unknown error');
     return new Response(
-      JSON.stringify({ error: error instanceof Error ? error.message : 'Unknown error' }),
+      JSON.stringify({ error: 'An error occurred processing your request' }),
       { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     );
   }

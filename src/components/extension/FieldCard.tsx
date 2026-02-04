@@ -85,7 +85,6 @@ export const FieldCard = ({
 
   const handleApply = () => {
     const valueToApply = isEditing ? editedValue.trim() : recommendation;
-    console.log('[FieldCard] handleApply called - isEditing:', isEditing, 'editedValue:', editedValue, 'valueToApply:', valueToApply);
     if (valueToApply && onApply) {
       // Update parent's field value when applying edited value
       if (isEditing && onEditValue) {

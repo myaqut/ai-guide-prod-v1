@@ -128,8 +128,6 @@ export const ExtensionPopup = () => {
 
   // Handle entry form submission - now we have name and optional URL
   const handleEntrySubmit = (name: string, url?: string) => {
-    console.log('[ExtensionPopup] Entry submitted - Name:', name, 'URL:', url);
-    
     const workflow = pendingCatalogWorkflow!;
     
     // Initialize the name field
@@ -179,9 +177,6 @@ export const ExtensionPopup = () => {
       : catalogState;
     if (!state) return;
     
-    console.log('[ExtensionPopup] Generating recommendation for field:', field.fieldName, 'with component:', state.approvedComponentName);
-    console.log('[ExtensionPopup] Current URL cache:', state.urlCache);
-    
     // Set this field to loading
     updateCatalogState({
       recommendations: state.recommendations.map(r => 
@@ -205,10 +200,6 @@ export const ExtensionPopup = () => {
       const newUrlCache = result.cachedUrls 
         ? { ...state.urlCache, ...result.cachedUrls }
         : state.urlCache;
-      
-      if (result.cachedUrls) {
-        console.log('[ExtensionPopup] Updated URL cache:', result.cachedUrls);
-      }
       
       const setter = state.workflowType === 'itc' ? setItcState : setApplicationState;
       setter(prev => prev ? {
@@ -246,8 +237,6 @@ export const ExtensionPopup = () => {
   // Handle active field change from content script - fetch recommendation for that field only
   const handleActiveFieldChange = useCallback((field: FieldData) => {
     if (!catalogState) return;
-    
-    console.log('[ExtensionPopup] Active field changed:', field.fieldName, field.fieldId);
     
     const isNameField = field.fieldName?.toLowerCase() === 'name';
     const workflow = catalogState.workflowType;
@@ -323,7 +312,6 @@ export const ExtensionPopup = () => {
     
     const workflow = catalogState.workflowType;
     
-    console.log('Generate recommendations clicked!');
     updateCatalogState({ isAnalyzing: true }, workflow);
     
     // Set all fields to loading
@@ -389,19 +377,15 @@ export const ExtensionPopup = () => {
     const workflow = catalogState.workflowType;
     const setter = workflow === 'itc' ? setItcState : setApplicationState;
     
-    console.log('Applying recommendation:', fieldId, value);
-    
     const field = catalogState.recommendations.find(r => r.fieldId === fieldId);
     if (field?.fieldName?.toLowerCase() === 'name' && value) {
       if (isValidComponentNameFormat(value)) {
-        console.log('[ExtensionPopup] Name format valid, setting approved component name:', value);
         updateCatalogState({ 
           approvedComponentName: value,
           nameFieldStatus: 'valid'
         }, workflow);
         toast.success(`${catalogState.workflowType === 'application' ? 'Application' : 'Component'} name approved: ${value}`);
       } else {
-        console.log('[ExtensionPopup] Name format invalid:', value);
         updateCatalogState({ nameFieldStatus: 'invalid' }, workflow);
         const guidance = getNameFormatGuidance(catalogState.workflowType);
         toast.warning(`Name format should be: ${guidance}`);
@@ -457,7 +441,6 @@ export const ExtensionPopup = () => {
     const workflow = catalogState.workflowType;
     const setter = workflow === 'itc' ? setItcState : setApplicationState;
     
-    console.log('[ExtensionPopup] Manual edit - updating field value:', fieldId, value);
     setter(prev => prev ? {
       ...prev,
       recommendations: prev.recommendations.map(r =>
