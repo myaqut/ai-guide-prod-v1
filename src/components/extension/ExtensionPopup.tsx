@@ -5,11 +5,13 @@ import { RecommendationList, FieldRecommendation } from "./RecommendationList";
 import { WorkflowSelector, WorkflowType } from "./WorkflowSelector";
 import { EntryForm } from "./EntryForm";
 import { PerplexityChat } from "./PerplexityChat";
+import { AuthScreen } from "./AuthScreen";
 import { generateRecommendations, FieldData, GenerateRecommendationsResult } from "@/lib/api";
 import { isValidNameFormat, getPageContext, getNameFormatGuidance, getWorkflowLabel } from "@/lib/workflow-config";
 import { toast } from "sonner";
-import { Monitor, Cloud, Sparkles, X, Plus } from "lucide-react";
+import { Monitor, Cloud, Sparkles, X, Plus, Loader2 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { useAuth } from "@/hooks/useAuth";
 
 // Declare chrome as a global for TypeScript
 declare const chrome: any;
@@ -41,6 +43,8 @@ interface CatalogWorkflowState {
 }
 
 export const ExtensionPopup = () => {
+  const { user, isLoading: authLoading } = useAuth();
+  
   // Active tab for switching between workflows
   const [activeTab, setActiveTab] = useState<'workflow' | 'itc' | 'application' | 'chat'>('workflow');
   
@@ -674,6 +678,25 @@ export const ExtensionPopup = () => {
       <Plus className="h-4 w-4" />
     </button>
   );
+
+  // Show loading state while checking auth
+  if (authLoading) {
+    return (
+      <div className="extension-popup flex flex-col items-center justify-center bg-background rounded-lg border border-border shadow-lg p-8">
+        <Loader2 className="h-8 w-8 animate-spin text-primary mb-3" />
+        <p className="text-sm text-muted-foreground">Loading...</p>
+      </div>
+    );
+  }
+
+  // Show auth screen if not logged in
+  if (!user) {
+    return (
+      <div className="extension-popup flex flex-col bg-background overflow-hidden rounded-lg border border-border shadow-lg">
+        <AuthScreen />
+      </div>
+    );
+  }
 
   return (
     <div className="extension-popup flex flex-col bg-background overflow-hidden rounded-lg border border-border shadow-lg">

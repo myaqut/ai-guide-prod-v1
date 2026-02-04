@@ -1,6 +1,9 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
+import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.49.4';
 
 const PERPLEXITY_API_KEY = Deno.env.get('PERPLEXITY_API_KEY');
+const SUPABASE_URL = Deno.env.get('SUPABASE_URL');
+const SUPABASE_ANON_KEY = Deno.env.get('SUPABASE_ANON_KEY');
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -17,10 +20,63 @@ interface ChatRequest {
   domainFilter?: string[];
 }
 
+// =====================
+// Authentication Helper
+// =====================
+
+async function authenticateRequest(req: Request): Promise<{ userId: string } | { error: Response }> {
+  const authHeader = req.headers.get('Authorization');
+  
+  if (!authHeader?.startsWith('Bearer ')) {
+    return {
+      error: new Response(
+        JSON.stringify({ error: 'Missing or invalid authorization header' }),
+        { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      )
+    };
+  }
+
+  if (!SUPABASE_URL || !SUPABASE_ANON_KEY) {
+    console.error('Supabase configuration missing');
+    return {
+      error: new Response(
+        JSON.stringify({ error: 'Server configuration error' }),
+        { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      )
+    };
+  }
+
+  const supabaseClient = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
+    global: { headers: { Authorization: authHeader } }
+  });
+
+  const token = authHeader.replace('Bearer ', '');
+  const { data, error } = await supabaseClient.auth.getUser(token);
+
+  if (error || !data?.user) {
+    console.error('Authentication failed:', error?.message);
+    return {
+      error: new Response(
+        JSON.stringify({ error: 'Unauthorized - invalid or expired token' }),
+        { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      )
+    };
+  }
+
+  console.log('[Auth] Request authenticated for user:', data.user.id);
+  return { userId: data.user.id };
+}
+
 serve(async (req) => {
   // Handle CORS preflight requests
   if (req.method === 'OPTIONS') {
     return new Response(null, { headers: corsHeaders });
+  }
+
+  // Authenticate the request
+  const authResult = await authenticateRequest(req);
+  if ('error' in authResult) {
+    return authResult.error;
   }
 
   try {
