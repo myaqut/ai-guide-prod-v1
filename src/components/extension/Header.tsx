@@ -1,6 +1,8 @@
-import { Settings, Zap, RotateCcw } from "lucide-react";
+import { Settings, Zap, RotateCcw, LogOut } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import extensionLogo from "@/assets/extension-logo.png";
+import { useAuth } from "@/hooks/useAuth";
+import { toast } from "sonner";
 
 interface HeaderProps {
   onSettingsClick: () => void;
@@ -9,6 +11,13 @@ interface HeaderProps {
 }
 
 export const Header = ({ onSettingsClick, onStartOver, isConnected }: HeaderProps) => {
+  const { signOut, user } = useAuth();
+
+  const handleSignOut = async () => {
+    await signOut();
+    toast.success('Signed out successfully');
+  };
+
   return (
     <header className="flex items-center justify-between px-4 py-3 border-b border-border bg-card">
       <div className="flex items-center gap-2">
@@ -20,7 +29,9 @@ export const Header = ({ onSettingsClick, onStartOver, isConnected }: HeaderProp
         </div>
         <div>
           <h1 className="text-sm font-semibold text-slate-800">Researcher</h1>
-          <p className="text-[10px] text-slate-500">AI Assistant</p>
+          <p className="text-[10px] text-slate-500 truncate max-w-[100px]" title={user?.email}>
+            {user?.email || 'AI Assistant'}
+          </p>
         </div>
       </div>
       
@@ -45,8 +56,18 @@ export const Header = ({ onSettingsClick, onStartOver, isConnected }: HeaderProp
           size="icon"
           className="h-8 w-8 text-muted-foreground hover:text-foreground"
           onClick={onSettingsClick}
+          title="Settings"
         >
           <Settings className="w-4 h-4" />
+        </Button>
+        <Button
+          variant="ghost"
+          size="icon"
+          className="h-8 w-8 text-muted-foreground hover:text-destructive"
+          onClick={handleSignOut}
+          title="Sign out"
+        >
+          <LogOut className="w-4 h-4" />
         </Button>
       </div>
     </header>
