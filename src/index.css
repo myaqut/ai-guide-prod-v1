@@ -297,21 +297,22 @@
 .extension-popup {
   width: 100%;
   min-width: 320px;
-  height: 100vh;
-  min-height: 100vh;
+  height: 100%;
+  max-height: 100vh;
   display: flex;
   flex-direction: column;
+  overflow: hidden;
 }
 
 /* Chrome extension side panel body reset */
-html, body {
+html, body, #root {
   width: 100%;
   min-width: 320px;
-  height: 100vh;
+  height: 100%;
+  max-height: 100vh;
   margin: 0;
   padding: 0;
-  overflow-y: auto;
-  overflow-x: hidden;
+  overflow: hidden;
 }
 
 /* Scrollbar styling */
