@@ -51,6 +51,9 @@ export const ExtensionPopup = () => {
   const [itcState, setItcState] = useState<CatalogWorkflowState | null>(null);
   const [applicationState, setApplicationState] = useState<CatalogWorkflowState | null>(null);
   
+  // Chat tab visibility (can be closed and reopened)
+  const [showChatTab, setShowChatTab] = useState(false);
+  
   // Settings panel visibility
   const [showSettings, setShowSettings] = useState(false);
   const [apiKeyConfigured, setApiKeyConfigured] = useState(true);
@@ -99,7 +102,8 @@ export const ExtensionPopup = () => {
   // Handle workflow selection from WorkflowSelector
   const handleWorkflowSelect = (workflow: WorkflowType) => {
     if (workflow === 'chat') {
-      // Switch directly to chat tab
+      // Switch directly to chat tab and show it
+      setShowChatTab(true);
       setActiveTab('chat');
       toast.success('Research Chat ready');
     } else {
@@ -511,8 +515,22 @@ export const ExtensionPopup = () => {
   const hasApplicationSession = applicationState !== null;
   const hasAnyCatalogSession = hasItcSession || hasApplicationSession;
   
-  // Show tabs when we have at least one active workflow or pending workflow
-  const showBottomTabs = hasAnyCatalogSession || pendingCatalogWorkflow !== null || activeTab === 'chat';
+  // Show tabs when we have at least one active workflow, pending workflow, or chat is open
+  const showBottomTabs = hasAnyCatalogSession || pendingCatalogWorkflow !== null || showChatTab;
+  
+  // Handle closing the chat tab
+  const handleCloseChat = () => {
+    setShowChatTab(false);
+    // Switch to another available tab
+    if (hasItcSession) {
+      setActiveTab('itc');
+    } else if (hasApplicationSession) {
+      setActiveTab('application');
+    } else {
+      setActiveTab('workflow');
+    }
+    toast.success('Research Chat closed');
+  };
 
   // Render content based on active tab
   const renderContent = () => {
@@ -699,15 +717,18 @@ export const ExtensionPopup = () => {
           )}
           
           {/* Research Chat Tab */}
-          <ChromeTab
-            active={activeTab === 'chat'}
-            icon={<Sparkles className="h-4 w-4" />}
-            label="Research Chat"
-            onClick={() => setActiveTab('chat')}
-          />
+          {showChatTab && (
+            <ChromeTab
+              active={activeTab === 'chat'}
+              icon={<Sparkles className="h-4 w-4" />}
+              label="Research Chat"
+              onClick={() => setActiveTab('chat')}
+              onClose={handleCloseChat}
+            />
+          )}
           
           {/* New tab button - only when not all workflows are open */}
-          {canOpenNewWorkflow && activeTab !== 'workflow' && (
+          {(canOpenNewWorkflow || !showChatTab) && activeTab !== 'workflow' && (
             <NewTabButton onClick={() => setActiveTab('workflow')} />
           )}
         </div>
