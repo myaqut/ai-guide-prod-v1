@@ -47,7 +47,8 @@ async function authenticateRequest(req: Request): Promise<{ userId: string } | {
   const { data, error } = await supabaseClient.auth.getUser(token);
 
   if (error || !data?.user) {
-    console.error('Authentication failed:', error?.message);
+    // Log error type without exposing details
+    console.error('Authentication failed');
     return {
       error: new Response(
         JSON.stringify({ error: 'Unauthorized - invalid or expired token' }),
@@ -56,7 +57,7 @@ async function authenticateRequest(req: Request): Promise<{ userId: string } | {
     };
   }
 
-  console.log('[Auth] Request authenticated for user:', data.user.id);
+  // Authenticated successfully - don't log user ID in production
   return { userId: data.user.id };
 }
 
@@ -87,7 +88,69 @@ const RequestSchema = z.object({
   ),
 });
 
-// Helper to validate URL format
+// =====================
+// SSRF Protection
+// =====================
+
+// Check if a hostname resolves to a private/internal IP range
+function isPrivateOrReservedIP(hostname: string): boolean {
+  const privateRanges = [
+    // IPv4 private ranges
+    /^127\./, // Localhost
+    /^10\./, // 10.0.0.0/8
+    /^172\.(1[6-9]|2[0-9]|3[0-1])\./, // 172.16.0.0/12
+    /^192\.168\./, // 192.168.0.0/16
+    /^169\.254\./, // Link-local/AWS metadata endpoint
+    /^0\./, // 0.0.0.0/8
+    // IPv6 private/reserved
+    /^::1$/, // IPv6 localhost
+    /^fc00:/i, // IPv6 private
+    /^fe80:/i, // IPv6 link-local
+    /^fd[0-9a-f]{2}:/i, // IPv6 unique local
+    // Common internal hostnames
+    /^localhost$/i,
+    /^.*\.local$/i,
+    /^.*\.internal$/i,
+    /^.*\.corp$/i,
+    /^.*\.lan$/i,
+  ];
+  return privateRanges.some(r => r.test(hostname));
+}
+
+// Validate URL is safe from SSRF attacks
+function isSafeUrl(urlString: string): boolean {
+  try {
+    const url = new URL(urlString);
+    
+    // Only allow http/https
+    if (url.protocol !== 'http:' && url.protocol !== 'https:') {
+      return false;
+    }
+    
+    // Block private/reserved IPs and internal hostnames
+    if (isPrivateOrReservedIP(url.hostname)) {
+      console.warn('[SSRF Protection] Blocked private/reserved address:', url.hostname);
+      return false;
+    }
+    
+    // Block common cloud metadata endpoints
+    const metadataHosts = [
+      '169.254.169.254', // AWS/GCP/Azure metadata
+      'metadata.google.internal',
+      'metadata.google.com',
+    ];
+    if (metadataHosts.includes(url.hostname.toLowerCase())) {
+      console.warn('[SSRF Protection] Blocked cloud metadata endpoint:', url.hostname);
+      return false;
+    }
+    
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+// Helper to validate URL format (basic check)
 function isValidUrl(str: string): boolean {
   try {
     const url = new URL(str);
@@ -102,8 +165,15 @@ function isValidUrl(str: string): boolean {
 // =====================
 
 // Validate URL is accessible with a HEAD request (timeout: 5 seconds)
+// Now includes SSRF protection to block internal/private URLs
 async function isUrlAccessible(url: string): Promise<boolean> {
+  // First check URL format
   if (!isValidUrl(url)) return false;
+  
+  // SSRF Protection: Block private/internal URLs
+  if (!isSafeUrl(url)) {
+    return false;
+  }
   
   try {
     const controller = new AbortController();
@@ -121,10 +191,8 @@ async function isUrlAccessible(url: string): Promise<boolean> {
     clearTimeout(timeoutId);
     
     // Accept 2xx and 3xx status codes as valid
-    const isValid = response.status >= 200 && response.status < 400;
-    console.log(`[URL Validation] ${url} -> ${response.status} (${isValid ? 'valid' : 'invalid'})`);
-    return isValid;
-  } catch (error) {
+    return response.status >= 200 && response.status < 400;
+  } catch {
     // Try GET request as fallback (some servers block HEAD)
     try {
       const controller = new AbortController();
@@ -142,11 +210,8 @@ async function isUrlAccessible(url: string): Promise<boolean> {
       
       clearTimeout(timeoutId);
       
-      const isValid = response.status >= 200 && response.status < 400;
-      console.log(`[URL Validation GET fallback] ${url} -> ${response.status} (${isValid ? 'valid' : 'invalid'})`);
-      return isValid;
-    } catch (getError) {
-      console.log(`[URL Validation] ${url} -> failed (${error instanceof Error ? error.message : 'unknown error'})`);
+      return response.status >= 200 && response.status < 400;
+    } catch {
       return false;
     }
   }
@@ -175,7 +240,6 @@ async function validateUrls(urls: string[], maxConcurrent: number = 3): Promise<
     }
   }
   
-  console.log(`[URL Validation] Validated ${urls.length} URLs, ${validatedUrls.length} accessible`);
   return validatedUrls;
 }
 
