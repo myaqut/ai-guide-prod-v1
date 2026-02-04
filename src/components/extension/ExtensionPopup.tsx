@@ -722,10 +722,13 @@ export const ExtensionPopup = () => {
       )}
       
       <div className="flex-1 min-h-0 overflow-hidden flex flex-col relative">
-        {/* Workflow selector - only rendered when active */}
-        {activeTab === 'workflow' && !hasAnyCatalogSession && !pendingCatalogWorkflow && (
+        {/* Workflow selector - shown when activeTab is 'workflow' (for adding new tabs) */}
+        <div className={cn(
+          "absolute inset-0 flex flex-col bg-background overflow-hidden",
+          activeTab === 'workflow' ? "z-10 visible" : "z-0 invisible pointer-events-none"
+        )}>
           <WorkflowSelector onSelect={handleWorkflowSelect} />
-        )}
+        </div>
         
         {/* ITC Tab - always rendered when session exists, visibility controlled by CSS */}
         {(hasItcSession || pendingCatalogWorkflow === 'itc') && (
@@ -750,7 +753,7 @@ export const ExtensionPopup = () => {
         {/* Research Chat - always rendered when showChatTab is true, visibility controlled by CSS */}
         {showChatTab && (
           <div className={cn(
-            "absolute inset-0 flex flex-col bg-background",
+            "absolute inset-0 flex flex-col bg-background overflow-hidden",
             activeTab === 'chat' ? "z-10 visible" : "z-0 invisible pointer-events-none"
           )}>
             <PerplexityChat 
