@@ -74,6 +74,202 @@ interface PerplexitySearchResult {
 // Store URLs found during date field searches for reuse in URL fields
 const dateFieldUrlCache: Record<string, string[]> = {};
 
+// =====================
+// Fast Inference Functions (Skip Perplexity)
+// =====================
+
+// Fields that can be inferred without web search - much faster!
+const INFERRABLE_FIELDS = new Set([
+  'provider', 'vendor', // Can extract from name
+  'lifecycle', 'lifecyclephase', 'phase', 'status', // Default to Active for current products
+]);
+
+// Check if field can be inferred without web search
+function canInferWithoutSearch(fieldName: string, workflowType: WorkflowType): boolean {
+  const lowerName = fieldName.toLowerCase().replace(/[_\-\s]/g, '');
+  // Provider can always be inferred from component name
+  if (lowerName.includes('provider') || lowerName === 'vendor') return true;
+  // Lifecycle phase for applications (they're typically "Active")
+  if (workflowType === 'application' && 
+      (lowerName.includes('lifecycle') || lowerName.includes('phase'))) return true;
+  return false;
+}
+
+// Extract provider from component/app name (first word is typically the company)
+function inferProviderFromName(componentName: string): string | null {
+  if (!componentName) return null;
+  const parts = componentName.trim().split(/\s+/);
+  if (parts.length === 0) return null;
+  
+  // Handle multi-word company names
+  const multiWordCompanies: Record<string, string> = {
+    'microsoft': 'Microsoft',
+    'google': 'Google',
+    'amazon': 'Amazon',
+    'aws': 'Amazon Web Services',
+    'oracle': 'Oracle',
+    'ibm': 'IBM',
+    'sap': 'SAP',
+    'vmware': 'VMware',
+    'salesforce': 'Salesforce',
+    'adobe': 'Adobe',
+    'cisco': 'Cisco',
+    'red hat': 'Red Hat',
+    'redhat': 'Red Hat',
+    'palo alto': 'Palo Alto Networks',
+    'mongo': 'MongoDB Inc.',
+    'mongodb': 'MongoDB Inc.',
+    'elastic': 'Elastic',
+    'hashicorp': 'HashiCorp',
+    'atlassian': 'Atlassian',
+    'slack': 'Salesforce (Slack)',
+    'snowflake': 'Snowflake Inc.',
+    'databricks': 'Databricks',
+    'confluent': 'Confluent',
+    'datadog': 'Datadog',
+    'splunk': 'Cisco (Splunk)',
+    'crowdstrike': 'CrowdStrike',
+    'okta': 'Okta',
+    'auth0': 'Okta (Auth0)',
+    'twilio': 'Twilio',
+    'stripe': 'Stripe',
+    'square': 'Block, Inc.',
+    'shopify': 'Shopify',
+    'hubspot': 'HubSpot',
+    'zendesk': 'Zendesk',
+    'freshworks': 'Freshworks',
+    'notion': 'Notion Labs',
+    'figma': 'Figma (Adobe)',
+    'canva': 'Canva',
+    'asana': 'Asana',
+    'monday': 'monday.com',
+    'zoom': 'Zoom Video Communications',
+    'webex': 'Cisco (Webex)',
+    'infor': 'Infor',
+    'workday': 'Workday',
+    'servicenow': 'ServiceNow',
+    'veeva': 'Veeva Systems',
+    'coupa': 'Coupa Software',
+    'docusign': 'DocuSign',
+    'dropbox': 'Dropbox',
+    'box': 'Box, Inc.',
+    'github': 'Microsoft (GitHub)',
+    'gitlab': 'GitLab',
+    'bitbucket': 'Atlassian (Bitbucket)',
+    'jira': 'Atlassian (Jira)',
+    'confluence': 'Atlassian (Confluence)',
+    'trello': 'Atlassian (Trello)',
+    'postman': 'Postman',
+    'vercel': 'Vercel',
+    'netlify': 'Netlify',
+    'heroku': 'Salesforce (Heroku)',
+    'digitalocean': 'DigitalOcean',
+    'cloudflare': 'Cloudflare',
+    'akamai': 'Akamai',
+    'siemens': 'Siemens',
+    'rockwell': 'Rockwell Automation',
+    'abb': 'ABB',
+    'honeywell': 'Honeywell',
+    'schneider': 'Schneider Electric',
+  };
+  
+  // Check for known company name matches
+  const lowerName = componentName.toLowerCase();
+  for (const [key, fullName] of Object.entries(multiWordCompanies)) {
+    if (lowerName.startsWith(key + ' ') || lowerName.startsWith(key + '-')) {
+      return fullName;
+    }
+  }
+  
+  // Default: return first word with proper capitalization
+  return parts[0].charAt(0).toUpperCase() + parts[0].slice(1);
+}
+
+// Generate fast inference result without web search
+function generateInferredRecommendation(
+  field: { fieldId: string; fieldName: string; currentValue?: string },
+  componentName: string,
+  workflowType: WorkflowType
+): { recommendation: string; confidence: number; reasoning: string } | null {
+  const lowerName = field.fieldName.toLowerCase().replace(/[_\-\s]/g, '');
+  
+  // Provider inference
+  if (lowerName.includes('provider') || lowerName === 'vendor') {
+    const provider = inferProviderFromName(componentName);
+    if (provider) {
+      return {
+        recommendation: provider,
+        confidence: 0.95,
+        reasoning: `Provider extracted from ${workflowType === 'itc' ? 'component' : 'application'} name "${componentName}". No web search required.`
+      };
+    }
+  }
+  
+  // Lifecycle phase for applications (typically Active for cataloged apps)
+  if (workflowType === 'application' && 
+      (lowerName.includes('lifecycle') || lowerName.includes('phase'))) {
+    return {
+      recommendation: 'Active',
+      confidence: 0.85,
+      reasoning: 'Default lifecycle phase for actively cataloged applications. Update if the application is being phased out or planned.'
+    };
+  }
+  
+  return null;
+}
+
+// =====================
+// Version Parsing Utilities
+// =====================
+
+// Parse version string into normalized components for precise matching
+function parseVersion(versionStr: string): { major: number; minor: number; patch: number; full: string } | null {
+  if (!versionStr) return null;
+  
+  // Extract version number from string (handles "Product 25.10", "v2.5.0", "2022", etc.)
+  const versionMatch = versionStr.match(/(\d+)(?:\.(\d+))?(?:\.(\d+))?/);
+  if (!versionMatch) return null;
+  
+  const major = parseInt(versionMatch[1], 10);
+  const minor = versionMatch[2] ? parseInt(versionMatch[2], 10) : 0;
+  const patch = versionMatch[3] ? parseInt(versionMatch[3], 10) : 0;
+  
+  // Build canonical full version string
+  const full = versionMatch[3] 
+    ? `${major}.${minor}.${patch}` 
+    : (versionMatch[2] ? `${major}.${minor}.0` : `${major}.0.0`);
+  
+  return { major, minor, patch, full };
+}
+
+// Extract version from component name
+function extractVersionFromName(componentName: string): string | null {
+  if (!componentName) return null;
+  
+  // Match version at end of name: "Product 25.10" or "Product 2022" or "Product v1.2.3"
+  const versionMatch = componentName.match(/(?:\s+v?)?(\d+(?:\.\d+)*)\s*$/i);
+  return versionMatch ? versionMatch[1] : null;
+}
+
+// Generate version matching instruction for search prompts
+function getVersionMatchingInstruction(componentName: string): string {
+  const version = extractVersionFromName(componentName);
+  if (!version) return '';
+  
+  const parsed = parseVersion(version);
+  if (!parsed) return '';
+  
+  // Create explicit instruction about version matching
+  return `
+CRITICAL VERSION MATCHING:
+- The EXACT version requested is: ${version} (normalized: ${parsed.full})
+- You MUST find dates for version ${parsed.full} specifically
+- ${parsed.patch === 0 && version.split('.').length <= 2 
+    ? `Version "${version}" means "${parsed.full}" - NOT "${parsed.major}.${parsed.minor}.100" or other patch versions`
+    : `Match this exact version only`}
+- If you find dates for a different version (e.g., ${parsed.major}.${parsed.minor}.${parsed.patch + 100}), that is NOT a match
+- Set confidence to 0.5 if you cannot find the exact version`;
+}
 // Check if a field is a lifecycle-related field (date or URL) - for ITC workflow
 function isLifecycleField(fieldName: string): boolean {
   const lifecycleKeywords = ['active', 'end of sale', 'end of support', 'end of life', 'lifecycle', 'eol', 'eos', 'release', 'standard support', 'endoflife'];
@@ -471,6 +667,17 @@ function extractVendorDomain(componentName: string): string | null {
     'rippling': 'rippling.com',
     'lever': 'lever.co',
     'greenhouse': 'greenhouse.io',
+    'infor': 'infor.com',
+    'infor hr': 'infor.com',
+    'ceridian': 'ceridian.com',
+    'adp': 'adp.com',
+    'ukg': 'ukg.com',
+    'paylocity': 'paylocity.com',
+    'paychex': 'paychex.com',
+    'namely': 'namely.com',
+    'lattice': 'lattice.com',
+    '15five': '15five.com',
+    'culture amp': 'cultureamp.com',
     // Finance & Accounting
     'quickbooks': 'quickbooks.intuit.com',
     'xero': 'xero.com',
@@ -479,11 +686,20 @@ function extractVendorDomain(componentName: string): string | null {
     'braintree': 'braintreepayments.com',
     'bill.com': 'bill.com',
     'expensify': 'expensify.com',
+    'netsuite': 'netsuite.com',
+    'sage': 'sage.com',
+    'intuit': 'intuit.com',
+    'coupa': 'coupa.com',
+    'concur': 'concur.com',
+    'anaplan': 'anaplan.com',
     // E-commerce
     'shopify': 'shopify.com',
     'bigcommerce': 'bigcommerce.com',
     'woocommerce': 'woocommerce.com',
     'magento': 'magento.com',
+    'squarespace': 'squarespace.com',
+    'wix': 'wix.com',
+    'weebly': 'weebly.com',
     // Developer Tools
     'postman': 'postman.com',
     'swagger': 'swagger.io',
@@ -492,17 +708,24 @@ function extractVendorDomain(componentName: string): string | null {
     'pagerduty': 'pagerduty.com',
     'opsgenie': 'atlassian.com',
     'linear': 'linear.app',
+    'snyk': 'snyk.io',
+    'sonarqube': 'sonarsource.com',
+    'jfrog': 'jfrog.com',
+    'artifactory': 'jfrog.com',
     // Cloud Storage & Backup
     'dropbox': 'dropbox.com',
     'box': 'box.com',
     'google drive': 'drive.google.com',
     'onedrive': 'onedrive.com',
     'backblaze': 'backblaze.com',
+    'egnyte': 'egnyte.com',
+    'wasabi': 'wasabi.com',
     // Design & Prototyping
     'sketch': 'sketch.com',
     'invision': 'invisionapp.com',
     'zeplin': 'zeplin.io',
     'abstract': 'abstract.com',
+    'framer': 'framer.com',
     // Documentation & Knowledge
     'gitbook': 'gitbook.com',
     'readme': 'readme.com',
@@ -512,19 +735,50 @@ function extractVendorDomain(componentName: string): string | null {
     'wistia': 'wistia.com',
     'kaltura': 'kaltura.com',
     'cloudinary': 'cloudinary.com',
+    'brightcove': 'brightcove.com',
     // Survey & Forms
     'typeform': 'typeform.com',
     'surveymonkey': 'surveymonkey.com',
     'jotform': 'jotform.com',
+    'qualtrics': 'qualtrics.com',
     // E-signature
     'docusign': 'docusign.com',
     'hellosign': 'hellosign.com',
     'pandadoc': 'pandadoc.com',
+    'adobe sign': 'adobe.com',
     // Customer Success
     'gainsight': 'gainsight.com',
     'churnzero': 'churnzero.com',
     'totango': 'totango.com',
-    // Other
+    'planhat': 'planhat.com',
+    // Business Intelligence
+    'tableau': 'tableau.com',
+    'power bi': 'powerbi.com',
+    'looker': 'looker.com',
+    'domo': 'domo.com',
+    'metabase': 'metabase.com',
+    'sisense': 'sisense.com',
+    'qlik': 'qlik.com',
+    'thoughtspot': 'thoughtspot.com',
+    // Integration & Automation
+    'zapier': 'zapier.com',
+    'make': 'make.com',
+    'integromat': 'make.com',
+    'workato': 'workato.com',
+    'tray.io': 'tray.io',
+    'mulesoft': 'mulesoft.com',
+    'boomi': 'boomi.com',
+    // ServiceNow & ITSM
+    'servicenow': 'servicenow.com',
+    'bmc': 'bmc.com',
+    'cherwell': 'cherwell.com',
+    'freshservice': 'freshworks.com',
+    // Other Enterprise
+    'veeva': 'veeva.com',
+    'medidata': 'medidata.com',
+    'cerner': 'cerner.com',
+    'epic': 'epic.com',
+    // Cloud Platforms
     'vercel': 'vercel.com',
     'netlify': 'netlify.com',
     'heroku': 'heroku.com',
@@ -532,6 +786,12 @@ function extractVendorDomain(componentName: string): string | null {
     'cloudflare': 'cloudflare.com',
     'akamai': 'akamai.com',
     'f5': 'f5.com',
+    'render': 'render.com',
+    'railway': 'railway.app',
+    'fly.io': 'fly.io',
+    'supabase': 'supabase.com',
+    'firebase': 'firebase.google.com',
+    'planetscale': 'planetscale.com',
   };
   
   const lowerName = componentName.toLowerCase();
@@ -574,7 +834,9 @@ STRICT RULES:
 3. For dates, provide in YYYY-MM-DD format.
 4. Cite the EXACT URL from ${vendorDomain} where you found the information.
 5. Focus on the exact product version asked about.
-6. Do NOT use or cite any third-party sources.`
+6. Do NOT use or cite any third-party sources.
+
+${getVersionMatchingInstruction(componentName)}`
           },
           {
             role: 'user',
@@ -1254,11 +1516,24 @@ serve(async (req) => {
     }
     
     let searchResults: Record<string, PerplexitySearchResult | null> = {};
+    // Store fast inference results for fields that don't need web search
+    const inferredResults: Record<string, { recommendation: string; confidence: number; reasoning: string }> = {};
     
     if (componentName) {
       // Use productUrlDomain if available, otherwise extract from component name
       const vendorDomainToUse = productUrlDomain || extractVendorDomain(componentName);
       console.log('Using vendor domain for searches:', vendorDomainToUse);
+
+      // OPTIMIZATION: First pass - handle fields that can be inferred without web search
+      for (const field of fields) {
+        if (canInferWithoutSearch(field.fieldName, workflowType)) {
+          const inferred = generateInferredRecommendation(field, componentName, workflowType);
+          if (inferred) {
+            console.log(`[FAST INFERENCE] Skipping Perplexity for ${field.fieldName} - inferred directly`);
+            inferredResults[field.fieldId] = inferred;
+          }
+        }
+      }
 
       if (isApplicationWorkflow) {
         // APPLICATION WORKFLOW: Search for SaaS-specific fields
@@ -1269,6 +1544,12 @@ serve(async (req) => {
         console.log(`[Application] Enforce official domain only: ${enforceOfficialDomain}, domain: ${vendorDomainToUse}, source: ${productUrlDomain ? 'productUrl' : (vendorDomainToUse ? 'vendorMapping' : 'none')}`);
 
         for (const field of fields) {
+          // Skip fields that were already inferred
+          if (inferredResults[field.fieldId]) {
+            console.log(`[Application] Skipping ${field.fieldName} - already inferred`);
+            continue;
+          }
+          
           const needsSearch = isApplicationSearchField(field.fieldName);
           
           if (needsSearch) {
@@ -1334,6 +1615,12 @@ serve(async (req) => {
         // ITC WORKFLOW: Original lifecycle-focused search
         // First pass: Search for date fields and cache their URLs
         for (const field of fields) {
+          // Skip fields that were already inferred
+          if (inferredResults[field.fieldId]) {
+            console.log(`[ITC] Skipping ${field.fieldName} - already inferred`);
+            continue;
+          }
+          
           const cacheKey = getDateFieldCacheKey(field.fieldName);
           const isUrlField = isUrlFieldForCachedDate(field.fieldName);
           
@@ -1343,9 +1630,15 @@ serve(async (req) => {
             continue;
           }
           
+          // Skip provider for ITC - already inferred above
+          const lowerFieldName = field.fieldName.toLowerCase();
+          if (lowerFieldName.includes('provider') || lowerFieldName === 'vendor') {
+            console.log(`[ITC] Skipping ${field.fieldName} - should be inferred`);
+            continue;
+          }
+          
           const needsSearch = isLifecycleField(field.fieldName) || 
                              field.fieldName.toLowerCase().includes('description') ||
-                             field.fieldName.toLowerCase().includes('provider') ||
                              field.fieldName.toLowerCase().includes('category') ||
                              field.fieldName.toLowerCase().includes('website') ||
                              field.fieldName.toLowerCase().includes('homepage');
@@ -1420,12 +1713,39 @@ USE THESE SEARCH RESULTS as your primary source. Include the source URL in your 
       : buildITCSystemPrompt(componentName, searchContext);
 
     const entityType = isApplicationWorkflow ? 'Application' : 'IT Component';
+    
+    // Filter out fields that were inferred - we don't need AI to process them
+    const fieldsNeedingAI = fields.filter((f: FieldData) => !inferredResults[f.fieldId]);
+    
+    // Log optimization stats
+    console.log(`[OPTIMIZATION] Total fields: ${fields.length}, Inferred locally: ${Object.keys(inferredResults).length}, Sent to AI: ${fieldsNeedingAI.length}`);
+    
+    // If all fields were inferred, skip AI call entirely
+    if (fieldsNeedingAI.length === 0) {
+      console.log('[OPTIMIZATION] All fields inferred - skipping AI Gateway call');
+      const fastRecommendations = fields.map((f: FieldData) => ({
+        fieldId: f.fieldId,
+        fieldName: f.fieldName,
+        currentValue: f.currentValue || null,
+        ...inferredResults[f.fieldId],
+        isOfficialSource: false
+      }));
+      
+      return new Response(
+        JSON.stringify({ 
+          recommendations: fastRecommendations,
+          cachedUrls: dateFieldUrlCache
+        }),
+        { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
+    
     const userPrompt = `Given the following catalog fields from a ${entityType} page, provide recommendations:
 
 Page Context: ${pageContext || `LeanIX ${entityType} catalog entry`}
 ${componentName ? `\nIMPORTANT: This is for "${componentName}" - ALL recommendations must be specifically for this exact ${entityType.toLowerCase()} only.\n` : ''}
 Fields to analyze:
-${fields.map((f: FieldData) => `- ${f.fieldName} (ID: ${f.fieldId})${f.currentValue ? `: current value "${f.currentValue}"` : ': empty'}`).join('\n')}
+${fieldsNeedingAI.map((f: FieldData) => `- ${f.fieldName} (ID: ${f.fieldId})${f.currentValue ? `: current value "${f.currentValue}"` : ': empty'}`).join('\n')}
 
 ${Object.keys(searchResults).length > 0 ? 'Use the search results provided in the system prompt for accurate information.' : ''}
 
@@ -1509,13 +1829,33 @@ Provide recommendations with appropriate professional values for all fields. Ret
         isOfficialSource: searchResult?.isOfficialSource ?? false
       };
     });
+    
+    // Merge inferred results with AI-generated recommendations
+    const allRecommendations: RecommendationResponse[] = [
+      // First, add inferred results
+      ...Object.entries(inferredResults).map(([fieldId, inferred]) => {
+        const field = fields.find((f: FieldData) => f.fieldId === fieldId);
+        return {
+          fieldId,
+          fieldName: field?.fieldName || fieldId,
+          currentValue: field?.currentValue || null,
+          recommendation: inferred.recommendation,
+          confidence: inferred.confidence,
+          reasoning: inferred.reasoning,
+          isOfficialSource: false // Inferred results are not from official sources
+        } as RecommendationResponse;
+      }),
+      // Then add AI-generated recommendations
+      ...enrichedRecommendations
+    ];
 
-    console.log('Parsed recommendations:', enrichedRecommendations);
+    console.log('Parsed recommendations:', allRecommendations);
+    console.log(`[OPTIMIZATION] Returned ${Object.keys(inferredResults).length} inferred + ${enrichedRecommendations.length} AI-generated = ${allRecommendations.length} total`);
 
     // Return recommendations along with any newly cached URLs so frontend can store them
     return new Response(
       JSON.stringify({ 
-        recommendations: enrichedRecommendations,
+        recommendations: allRecommendations,
         cachedUrls: dateFieldUrlCache  // Return cached URLs so frontend can pass them in future requests
       }),
       { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
