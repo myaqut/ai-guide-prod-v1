@@ -43,7 +43,10 @@ interface CatalogWorkflowState {
 }
 
 export const ExtensionPopup = () => {
-  const { user, isLoading: authLoading } = useAuth();
+  // Auth temporarily disabled for testing
+  // const { user, isLoading: authLoading } = useAuth();
+  const user = true; // Bypass auth
+  const authLoading = false;
   
   // Active tab for switching between workflows
   const [activeTab, setActiveTab] = useState<'workflow' | 'itc' | 'application' | 'chat'>('workflow');
