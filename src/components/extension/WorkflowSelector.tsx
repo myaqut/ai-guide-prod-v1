@@ -1,8 +1,7 @@
-import { Monitor, Cloud } from "lucide-react";
-import { Button } from "@/components/ui/button";
+import { Monitor, Cloud, Sparkles } from "lucide-react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 
-export type WorkflowType = 'itc' | 'application';
+export type WorkflowType = 'itc' | 'application' | 'chat';
 
 interface WorkflowSelectorProps {
   onSelect: (workflow: WorkflowType) => void;
@@ -14,7 +13,7 @@ export const WorkflowSelector = ({ onSelect }: WorkflowSelectorProps) => {
       <div className="text-center mb-2">
         <h2 className="text-lg font-semibold text-foreground">Select Workflow</h2>
         <p className="text-xs text-muted-foreground mt-1">
-          Choose the type of fact sheet you're working with
+          Choose the type of fact sheet or start a research chat
         </p>
       </div>
       
@@ -63,6 +62,30 @@ export const WorkflowSelector = ({ onSelect }: WorkflowSelectorProps) => {
           <CardContent className="pb-4">
             <p className="text-xs text-muted-foreground">
               Vendor info, pricing, integrations, compliance, user access
+            </p>
+          </CardContent>
+        </Card>
+
+        <Card 
+          className="cursor-pointer transition-all hover:border-warning hover:shadow-md group"
+          onClick={() => onSelect('chat')}
+        >
+          <CardHeader className="pb-2 pt-4">
+            <div className="flex items-center gap-3">
+              <div className="p-2 rounded-lg bg-warning/10 text-warning group-hover:bg-warning group-hover:text-warning-foreground transition-colors">
+                <Sparkles className="h-5 w-5" />
+              </div>
+              <div>
+                <CardTitle className="text-base">Research Chat</CardTitle>
+                <CardDescription className="text-xs">
+                  Ask Perplexity anything
+                </CardDescription>
+              </div>
+            </div>
+          </CardHeader>
+          <CardContent className="pb-4">
+            <p className="text-xs text-muted-foreground">
+              Real-time search, citations, domain filtering
             </p>
           </CardContent>
         </Card>

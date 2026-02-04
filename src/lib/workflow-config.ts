@@ -1,5 +1,5 @@
 // Workflow type definitions
-export type WorkflowType = 'itc' | 'application';
+export type WorkflowType = 'itc' | 'application' | 'chat';
 
 // Field configurations for each workflow type
 export interface FieldConfig {
@@ -42,14 +42,17 @@ export const APPLICATION_FIELDS: FieldConfig[] = [
 ];
 
 export function getFieldsForWorkflow(workflow: WorkflowType): FieldConfig[] {
+  if (workflow === 'chat') return []; // Chat doesn't have fields
   return workflow === 'itc' ? ITC_FIELDS : APPLICATION_FIELDS;
 }
 
 export function getWorkflowLabel(workflow: WorkflowType): string {
+  if (workflow === 'chat') return 'Research Chat';
   return workflow === 'itc' ? 'IT Component' : 'Application';
 }
 
 export function getPageContext(workflow: WorkflowType): string {
+  if (workflow === 'chat') return 'Research Chat';
   return workflow === 'itc' ? 'LeanIX IT Component' : 'LeanIX Application';
 }
 
@@ -67,6 +70,8 @@ export function isValidNameFormat(name: string, workflow: WorkflowType): boolean
   const hasCompany = /^[A-Z]/.test(parts[0]);
   if (!hasCompany) return false;
   
+  if (workflow === 'chat') return true; // Chat doesn't need name validation
+  
   if (workflow === 'itc') {
     // ITC: Company + Product + Version pattern (version can be numbers, x.x format, or year)
     // Examples: "Microsoft SQL Server 2022", "MongoDB Community Server 8.2", "Apache Kafka 3.6.0"
@@ -81,6 +86,9 @@ export function isValidNameFormat(name: string, workflow: WorkflowType): boolean
 }
 
 export function getNameFormatGuidance(workflow: WorkflowType): string {
+  if (workflow === 'chat') {
+    return 'Research Chat - ask any question';
+  }
   if (workflow === 'itc') {
     return 'Name should follow: [Company] + [Product] + [Version]. Example: "Microsoft SQL Server 2022"';
   } else {
