@@ -40,6 +40,31 @@ export const FieldCard = ({
   const [isEditing, setIsEditing] = useState(false);
   const [editedValue, setEditedValue] = useState("");
 
+  // Safe rendering of text with clickable links (prevents XSS)
+  const renderTextWithLinks = (text: string) => {
+    const urlRegex = /(https?:\/\/[^\s<]+)/g;
+    const parts = text.split(urlRegex);
+    
+    return parts.map((part, index) => {
+      if (urlRegex.test(part)) {
+        // Reset regex lastIndex after test
+        urlRegex.lastIndex = 0;
+        return (
+          <a 
+            key={index}
+            href={part} 
+            target="_blank" 
+            rel="noopener noreferrer"
+            className="text-primary underline hover:text-primary/80"
+          >
+            {part}
+          </a>
+        );
+      }
+      return <span key={index}>{part}</span>;
+    });
+  };
+
   const handleCopy = async () => {
     const valueToCopy = isEditing ? editedValue : recommendation;
     if (!valueToCopy) return;
@@ -208,15 +233,9 @@ export const FieldCard = ({
           )}
 
           {expanded && reasoning && !isEditing && (
-            <p 
-              className="text-xs text-muted-foreground bg-muted/30 rounded p-2 mb-2 animate-fade-in [&_a]:text-primary [&_a]:underline [&_a]:hover:text-primary/80"
-              dangerouslySetInnerHTML={{
-                __html: reasoning.replace(
-                  /(https?:\/\/[^\s<]+)/g,
-                  '<a href="$1" target="_blank" rel="noopener noreferrer">$1</a>'
-                )
-              }}
-            />
+            <p className="text-xs text-muted-foreground bg-muted/30 rounded p-2 mb-2 animate-fade-in">
+              {renderTextWithLinks(reasoning)}
+            </p>
           )}
 
           {/* No recommendation message */}
