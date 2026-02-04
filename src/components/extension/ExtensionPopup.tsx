@@ -543,16 +543,6 @@ export const ExtensionPopup = () => {
       return <WorkflowSelector onSelect={handleWorkflowSelect} />;
     }
     
-    // Research Chat tab - use embedded mode when tabs are visible
-    if (activeTab === 'chat') {
-      return (
-        <PerplexityChat 
-          embedded={showBottomTabs}
-          onBack={!showBottomTabs ? () => setActiveTab(hasAnyCatalogSession ? (hasItcSession ? 'itc' : 'application') : 'workflow') : undefined} 
-        />
-      );
-    }
-    
     // ITC or Application tab
     if (activeTab === 'itc' || activeTab === 'application') {
       const state = activeTab === 'itc' ? itcState : applicationState;
@@ -757,8 +747,22 @@ export const ExtensionPopup = () => {
         </div>
       )}
       
-      <div className="flex-1 min-h-0 overflow-hidden flex flex-col">
-        {renderContent()}
+      <div className="flex-1 min-h-0 overflow-hidden flex flex-col relative">
+        {/* Other content */}
+        {activeTab !== 'chat' && renderContent()}
+        
+        {/* Always render PerplexityChat when showChatTab is true, but hide with CSS when not active */}
+        {showChatTab && (
+          <div className={cn(
+            "absolute inset-0 flex flex-col bg-background",
+            activeTab === 'chat' ? "z-10 visible" : "z-0 invisible pointer-events-none"
+          )}>
+            <PerplexityChat 
+              embedded={showBottomTabs}
+              onBack={!showBottomTabs ? () => setActiveTab(hasAnyCatalogSession ? (hasItcSession ? 'itc' : 'application') : 'workflow') : undefined} 
+            />
+          </div>
+        )}
       </div>
     </div>
   );
