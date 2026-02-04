@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Check, Copy, ChevronDown, ChevronUp, Lightbulb, RefreshCw, Pencil, X, Trash2, ShieldCheck, Globe } from "lucide-react";
+import { Check, Copy, ChevronDown, ChevronUp, Lightbulb, RefreshCw, Pencil, X, Trash2, ShieldCheck, Globe, Link2, CheckCircle2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
@@ -18,6 +18,16 @@ interface FieldCardProps {
   onRefresh?: () => void;
   onEditValue?: (value: string) => void;
   onRemove?: () => void;
+}
+
+// Helper to check if a string is a valid URL
+function isValidUrl(str: string): boolean {
+  try {
+    const url = new URL(str);
+    return url.protocol === 'http:' || url.protocol === 'https:';
+  } catch {
+    return false;
+  }
 }
 
 export const FieldCard = ({
@@ -213,9 +223,21 @@ export const FieldCard = ({
                     autoFocus
                   />
                 ) : (
-                  <p className="text-sm text-foreground font-medium break-words">
-                    {recommendation}
-                  </p>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm text-foreground font-medium break-words">
+                      {recommendation}
+                    </p>
+                    {/* URL Verified badge - shows when recommendation is a URL and from official source */}
+                    {recommendation && isValidUrl(recommendation) && isOfficialSource && (
+                      <div className="flex items-center gap-1 mt-1.5">
+                        <div className="inline-flex items-center gap-1 text-[10px] font-medium px-1.5 py-0.5 rounded bg-success/10 text-success">
+                          <CheckCircle2 className="w-3 h-3" />
+                          <Link2 className="w-3 h-3" />
+                          Link Verified
+                        </div>
+                      </div>
+                    )}
+                  </div>
                 )}
               </div>
             </div>
