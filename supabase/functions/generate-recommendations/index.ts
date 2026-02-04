@@ -86,10 +86,17 @@ function isLifecycleField(fieldName: string): boolean {
 function isApplicationSearchField(fieldName: string): boolean {
   const searchableFields = [
     'description', 'provider', 'vendor', 'business capability', 'hosting', 'data classification',
-    'integration', 'gdpr', 'compliance', 'sso', 'authentication', 'pricing', 'category', 'website'
+    'integration', 'gdpr', 'compliance', 'sso', 'authentication', 'pricing', 'category', 'website',
+    'api url', 'login url', 'g2 category', 'single sign'
   ];
   const lowerName = fieldName.toLowerCase();
   return searchableFields.some(keyword => lowerName.includes(keyword));
+}
+
+// Check if this is a G2 category field that needs G2.com search
+function isG2CategoryField(fieldName: string): boolean {
+  const lowerName = fieldName.toLowerCase();
+  return lowerName.includes('g2') && lowerName.includes('category');
 }
 
 // Check if this is a URL field that should use cached URL from date search
@@ -200,52 +207,67 @@ function buildFieldSearchQuery(componentName: string, fieldName: string, vendorD
 }
 
 // Build search queries for Application workflow fields
-function buildApplicationSearchQuery(appName: string, fieldName: string, vendorDomain?: string): string {
+function buildApplicationSearchQuery(appName: string, fieldName: string, vendorDomain?: string, enforceOfficialDomain?: boolean): string {
   const lowerFieldName = fieldName.toLowerCase();
   
-  // Official source hint
-  const officialSourceHint = vendorDomain 
-    ? `site:${vendorDomain}` 
-    : 'official website';
+  // When enforceOfficialDomain is true and vendorDomain is provided, ONLY search that domain
+  const domainFilter = enforceOfficialDomain && vendorDomain ? `site:${vendorDomain}` : '';
+  const officialSourceHint = vendorDomain ? `site:${vendorDomain}` : 'official website';
   
   // Description - what the application does
   if (lowerFieldName.includes('description')) {
-    return `"${appName}" SaaS application what is ${appName} features capabilities overview ${officialSourceHint}`;
+    return `${domainFilter} "${appName}" SaaS application what is ${appName} features capabilities overview ${!enforceOfficialDomain ? officialSourceHint : ''}`.trim();
   }
   
   // Provider/Vendor
   if (lowerFieldName.includes('provider') || lowerFieldName.includes('vendor')) {
-    return `"${appName}" vendor company who makes ${appName}`;
+    return `"${appName}" vendor company who makes ${appName} official company`;
   }
   
   // Business Capability
   if (lowerFieldName.includes('business') || lowerFieldName.includes('capability')) {
-    return `"${appName}" business use case what is it used for business capabilities`;
+    return `${domainFilter} "${appName}" business use case what is it used for business capabilities ${!enforceOfficialDomain ? officialSourceHint : ''}`.trim();
   }
   
-  // Hosting Type
+  // Hosting Description - specifically look for AWS, Azure, GCP, cloud infrastructure
   if (lowerFieldName.includes('hosting')) {
-    return `"${appName}" hosting model SaaS on-premise cloud deployment options`;
+    return `${domainFilter} "${appName}" infrastructure hosting AWS Azure GCP Google Cloud data center cloud hosting on-premise deployment ${!enforceOfficialDomain ? officialSourceHint : ''}`.trim();
   }
   
   // Data Classification
   if (lowerFieldName.includes('data') && lowerFieldName.includes('classification')) {
-    return `"${appName}" data handling security data types processed SOC2 ISO27001`;
+    return `${domainFilter} "${appName}" data handling security data types processed SOC2 ISO27001 ${!enforceOfficialDomain ? officialSourceHint : ''}`.trim();
   }
   
   // Integrations
   if (lowerFieldName.includes('integration')) {
-    return `"${appName}" integrations API connections supported platforms`;
+    return `${domainFilter} "${appName}" integrations API connections supported platforms ${!enforceOfficialDomain ? officialSourceHint : ''}`.trim();
   }
   
   // GDPR Compliance
   if (lowerFieldName.includes('gdpr')) {
-    return `"${appName}" GDPR compliance data privacy EU regulations`;
+    return `${domainFilter} "${appName}" GDPR compliance data privacy EU regulations ${!enforceOfficialDomain ? officialSourceHint : ''}`.trim();
   }
   
-  // SSO Support
-  if (lowerFieldName.includes('sso') || lowerFieldName.includes('authentication')) {
-    return `"${appName}" SSO single sign-on SAML OAuth authentication support`;
+  // SSO Provider - specifically look for SSO providers like Okta, Azure AD, etc.
+  if (lowerFieldName.includes('sso') || (lowerFieldName.includes('single') && lowerFieldName.includes('sign'))) {
+    return `${domainFilter} "${appName}" SSO single sign-on providers Okta Azure AD SAML OAuth authentication supported identity providers ${!enforceOfficialDomain ? officialSourceHint : ''}`.trim();
+  }
+  
+  // API URL - look for API documentation
+  if (lowerFieldName.includes('api') && lowerFieldName.includes('url')) {
+    return `${domainFilter} "${appName}" API documentation developer docs REST API reference ${!enforceOfficialDomain ? officialSourceHint : ''}`.trim();
+  }
+  
+  // Login URL - look for login page
+  if (lowerFieldName.includes('login') && lowerFieldName.includes('url')) {
+    return `${domainFilter} "${appName}" login page sign in URL ${!enforceOfficialDomain ? officialSourceHint : ''}`.trim();
+  }
+  
+  // G2 Category - search on G2.com specifically
+  if (lowerFieldName.includes('g2') && lowerFieldName.includes('category')) {
+    // Always search G2 for this field, ignore domain restriction
+    return `site:g2.com "${appName}" category software reviews`;
   }
   
   // Website
@@ -264,7 +286,7 @@ function buildApplicationSearchQuery(appName: string, fieldName: string, vendorD
   }
   
   // Default
-  return `"${appName}" SaaS application overview features ${officialSourceHint}`;
+  return `${domainFilter} "${appName}" SaaS application overview features ${!enforceOfficialDomain ? officialSourceHint : ''}`.trim();
 }
 
 // Extract vendor/provider from component name for official site search
@@ -295,7 +317,7 @@ function extractVendorDomain(componentName: string): string | null {
     'nginx': 'nginx.com',
     'hashicorp': 'hashicorp.com',
     'terraform': 'hashicorp.com',
-    'vaultspeed': 'vaultspeed.com',  // Must be before 'vault' to avoid HashiCorp Vault match
+    'vaultspeed': 'vaultspeed.com',
     'vault': 'hashicorp.com',
     'consul': 'hashicorp.com',
     'ansible': 'ansible.com',
@@ -587,6 +609,358 @@ ${vendorDomain ? `7. The official domain is ${vendorDomain} - flag if you're NOT
   }
 }
 
+// =====================
+// Application-Specific Search Functions
+// =====================
+
+// Search for G2 Category - always on G2.com
+async function searchApplicationG2Category(appName: string, vendorDomain: string | null): Promise<PerplexitySearchResultWithQuality | null> {
+  try {
+    console.log(`[G2 Category] Searching G2.com for ${appName}`);
+
+    const response = await fetch('https://api.perplexity.ai/chat/completions', {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${PERPLEXITY_API_KEY}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        model: 'sonar',
+        messages: [
+          {
+            role: 'system',
+            content: `You are a software research assistant. Search for the G2 category of "${appName}".
+
+RULES:
+1. First search on G2.com for "${appName}"
+2. If the application IS listed on G2:
+   - Provide the exact G2 category (e.g., "CRM Software", "Project Management")
+   - Include the G2 product URL (e.g., https://www.g2.com/products/slack/reviews)
+3. If the application is NOT listed on G2:
+   - Search for similar applications in the same space
+   - Find what G2 category those similar apps are in
+   - Recommend that category and explain why
+   - Provide the G2 category page URL
+4. Always include the G2 URL in your response`
+          },
+          {
+            role: 'user',
+            content: `Find the G2 category for "${appName}". If not on G2, find similar apps and their G2 category.`
+          }
+        ],
+        temperature: 0.1,
+        top_p: 0.9,
+        max_tokens: 1500,
+        return_images: false,
+        return_related_questions: false,
+        search_domain_filter: ['g2.com'],
+      }),
+    });
+
+    if (!response.ok) {
+      console.error(`[G2 Category] API error:`, response.status);
+      return null;
+    }
+
+    const data = await response.json();
+    const content = data.choices?.[0]?.message?.content || '';
+    const citations = data.citations || [];
+    
+    console.log(`[G2 Category] Found ${citations.length} citations`);
+
+    return {
+      content: `[G2.COM CATEGORY SEARCH]\n\n${content}`,
+      urls: citations,
+      isOfficialSource: true // G2 is the authoritative source for G2 categories
+    };
+  } catch (error) {
+    console.error('[G2 Category] Error:', error);
+    return null;
+  }
+}
+
+// Search for SSO Providers supported by the application
+async function searchApplicationSSOProviders(appName: string, vendorDomain: string | null, enforceOfficialDomain: boolean): Promise<PerplexitySearchResultWithQuality | null> {
+  try {
+    console.log(`[SSO Providers] Searching for ${appName}, enforceOfficial: ${enforceOfficialDomain}`);
+
+    const domainFilter = enforceOfficialDomain && vendorDomain ? [vendorDomain] : undefined;
+
+    const response = await fetch('https://api.perplexity.ai/chat/completions', {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${PERPLEXITY_API_KEY}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        model: 'sonar',
+        messages: [
+          {
+            role: 'system',
+            content: `You are a security research assistant. Find SSO (Single Sign-On) information for "${appName}".
+
+SEARCH FOCUS:
+1. Does "${appName}" support SSO/SAML/OAuth authentication?
+2. What identity providers are supported? Look for:
+   - Okta
+   - Azure Active Directory (Azure AD / Entra ID)
+   - Google Workspace
+   - OneLogin
+   - Ping Identity
+   - ADFS
+   - Generic SAML 2.0
+   - OAuth 2.0 / OIDC
+3. Is SSO available on all plans or only enterprise?
+
+RESPONSE FORMAT:
+- List supported SSO providers explicitly
+- Indicate if SSO is available (Yes/No/Enterprise Only)
+- Include the URL where SSO documentation is found
+${enforceOfficialDomain && vendorDomain ? `\nONLY use information from ${vendorDomain}` : ''}`
+          },
+          {
+            role: 'user',
+            content: `What SSO identity providers does "${appName}" support? List specific providers like Okta, Azure AD, etc.`
+          }
+        ],
+        temperature: 0.1,
+        top_p: 0.9,
+        max_tokens: 1500,
+        return_images: false,
+        return_related_questions: false,
+        search_domain_filter: domainFilter,
+      }),
+    });
+
+    if (!response.ok) {
+      console.error(`[SSO Providers] API error:`, response.status);
+      return null;
+    }
+
+    const data = await response.json();
+    const content = data.choices?.[0]?.message?.content || '';
+    const citations = data.citations || [];
+    
+    console.log(`[SSO Providers] Found ${citations.length} citations`);
+
+    return {
+      content: `[SSO PROVIDERS SEARCH]\n\n${content}`,
+      urls: citations,
+      isOfficialSource: enforceOfficialDomain
+    };
+  } catch (error) {
+    console.error('[SSO Providers] Error:', error);
+    return null;
+  }
+}
+
+// Search for API Documentation URL
+async function searchApplicationAPIUrl(appName: string, vendorDomain: string | null, enforceOfficialDomain: boolean): Promise<PerplexitySearchResultWithQuality | null> {
+  try {
+    console.log(`[API URL] Searching for ${appName} API docs, enforceOfficial: ${enforceOfficialDomain}`);
+
+    const domainFilter = enforceOfficialDomain && vendorDomain ? [vendorDomain] : undefined;
+
+    const response = await fetch('https://api.perplexity.ai/chat/completions', {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${PERPLEXITY_API_KEY}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        model: 'sonar',
+        messages: [
+          {
+            role: 'system',
+            content: `You are a developer documentation research assistant. Find the API documentation URL for "${appName}".
+
+SEARCH FOCUS:
+1. Official API documentation page
+2. Developer portal or developer docs
+3. REST API reference
+4. API getting started guide
+
+RESPONSE FORMAT:
+- If API documentation exists: Provide the EXACT URL to the API documentation
+- If no API exists: State "API not available" or "No public API"
+- Include information about API type (REST, GraphQL, etc.)
+${enforceOfficialDomain && vendorDomain ? `\nONLY use URLs from ${vendorDomain}` : ''}`
+          },
+          {
+            role: 'user',
+            content: `Find the API documentation URL for "${appName}". I need the direct link to their developer/API docs.`
+          }
+        ],
+        temperature: 0.1,
+        top_p: 0.9,
+        max_tokens: 1500,
+        return_images: false,
+        return_related_questions: false,
+        search_domain_filter: domainFilter,
+      }),
+    });
+
+    if (!response.ok) {
+      console.error(`[API URL] API error:`, response.status);
+      return null;
+    }
+
+    const data = await response.json();
+    const content = data.choices?.[0]?.message?.content || '';
+    const citations = data.citations || [];
+    
+    console.log(`[API URL] Found ${citations.length} citations`);
+
+    return {
+      content: `[API DOCUMENTATION SEARCH]\n\n${content}`,
+      urls: citations,
+      isOfficialSource: enforceOfficialDomain
+    };
+  } catch (error) {
+    console.error('[API URL] Error:', error);
+    return null;
+  }
+}
+
+// Search for Login URL
+async function searchApplicationLoginUrl(appName: string, vendorDomain: string | null, enforceOfficialDomain: boolean): Promise<PerplexitySearchResultWithQuality | null> {
+  try {
+    console.log(`[Login URL] Searching for ${appName} login page, enforceOfficial: ${enforceOfficialDomain}`);
+
+    const domainFilter = enforceOfficialDomain && vendorDomain ? [vendorDomain] : undefined;
+
+    const response = await fetch('https://api.perplexity.ai/chat/completions', {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${PERPLEXITY_API_KEY}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        model: 'sonar',
+        messages: [
+          {
+            role: 'system',
+            content: `You are a research assistant. Find the login page URL for "${appName}".
+
+SEARCH FOCUS:
+1. Official login page URL
+2. Sign-in page
+3. User authentication page
+
+RESPONSE FORMAT:
+- If login page exists: Provide the EXACT URL (e.g., https://app.example.com/login or https://example.com/signin)
+- If the application doesn't have a web login (e.g., desktop-only): State "Not available - desktop application only"
+- If you cannot find a login page: State "Not available"
+${enforceOfficialDomain && vendorDomain ? `\nONLY use URLs from ${vendorDomain}` : ''}`
+          },
+          {
+            role: 'user',
+            content: `Find the login page URL for "${appName}". I need the direct link where users sign in.`
+          }
+        ],
+        temperature: 0.1,
+        top_p: 0.9,
+        max_tokens: 1000,
+        return_images: false,
+        return_related_questions: false,
+        search_domain_filter: domainFilter,
+      }),
+    });
+
+    if (!response.ok) {
+      console.error(`[Login URL] API error:`, response.status);
+      return null;
+    }
+
+    const data = await response.json();
+    const content = data.choices?.[0]?.message?.content || '';
+    const citations = data.citations || [];
+    
+    console.log(`[Login URL] Found ${citations.length} citations`);
+
+    return {
+      content: `[LOGIN URL SEARCH]\n\n${content}`,
+      urls: citations,
+      isOfficialSource: enforceOfficialDomain
+    };
+  } catch (error) {
+    console.error('[Login URL] Error:', error);
+    return null;
+  }
+}
+
+// Search for Hosting/Infrastructure information
+async function searchApplicationHosting(appName: string, vendorDomain: string | null, enforceOfficialDomain: boolean): Promise<PerplexitySearchResultWithQuality | null> {
+  try {
+    console.log(`[Hosting] Searching for ${appName} hosting info, enforceOfficial: ${enforceOfficialDomain}`);
+
+    const domainFilter = enforceOfficialDomain && vendorDomain ? [vendorDomain] : undefined;
+
+    const response = await fetch('https://api.perplexity.ai/chat/completions', {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${PERPLEXITY_API_KEY}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        model: 'sonar',
+        messages: [
+          {
+            role: 'system',
+            content: `You are an infrastructure research assistant. Find hosting and infrastructure details for "${appName}".
+
+SEARCH FOCUS:
+1. Cloud infrastructure provider:
+   - Amazon Web Services (AWS)
+   - Microsoft Azure
+   - Google Cloud Platform (GCP)
+   - Other cloud providers
+2. Data center locations/regions
+3. Is it SaaS, On-Premise, Hybrid, or PaaS?
+4. Any self-hosted options?
+
+RESPONSE FORMAT:
+- Specify the cloud provider(s) used (e.g., "Hosted on AWS", "Multi-cloud: AWS and Azure")
+- Include data center regions if available
+- Indicate hosting model (SaaS/On-Premise/Hybrid)
+${enforceOfficialDomain && vendorDomain ? `\nONLY use information from ${vendorDomain}` : ''}`
+          },
+          {
+            role: 'user',
+            content: `What cloud infrastructure/hosting does "${appName}" use? Is it on AWS, Azure, GCP, or other?`
+          }
+        ],
+        temperature: 0.1,
+        top_p: 0.9,
+        max_tokens: 1500,
+        return_images: false,
+        return_related_questions: false,
+        search_domain_filter: domainFilter,
+      }),
+    });
+
+    if (!response.ok) {
+      console.error(`[Hosting] API error:`, response.status);
+      return null;
+    }
+
+    const data = await response.json();
+    const content = data.choices?.[0]?.message?.content || '';
+    const citations = data.citations || [];
+    
+    console.log(`[Hosting] Found ${citations.length} citations`);
+
+    return {
+      content: `[HOSTING/INFRASTRUCTURE SEARCH]\n\n${content}`,
+      urls: citations,
+      isOfficialSource: enforceOfficialDomain
+    };
+  } catch (error) {
+    console.error('[Hosting] Error:', error);
+    return null;
+  }
+}
+
 // Main search function: Two-phase approach - Official first, then fallback
 // Now accepts optional productUrlDomain to prioritize searches
 async function searchFieldInfo(componentName: string, fieldName: string, productUrlDomain?: string | null): Promise<PerplexitySearchResult | null> {
@@ -665,10 +1039,13 @@ FIELD GUIDELINES:
 - Business Capability: Main function (e.g., "CRM", "Project Management")
 - Functional/Technical Fit: "Excellent"/"Good"/"Adequate"/"Insufficient"/"Not Assessed"
 - Lifecycle Phase: "Plan"/"Phase In"/"Active"/"Phase Out"/"End of Life"
-- Hosting Type: "SaaS"/"On-Premise"/"Hybrid"/"PaaS"
+- Hosting Type: Describe cloud infrastructure (AWS, Azure, GCP, etc.) or "On-Premise"/"Hybrid"
 - Data Classification: "Public"/"Internal"/"Confidential"/"Restricted"
 - GDPR: "Yes"/"No"/"Partial"/"Unknown"
-- SSO: "Yes"/"No"/"Enterprise Only"
+- SSO Provider: List specific providers (e.g., "Okta, Azure AD, Google") or "Not supported"
+- API URL: Direct URL to API documentation, or "Not available"
+- Login URL: Direct URL to login page, or "Not available"
+- G2 Category: Category from G2.com with URL, or similar app category if not listed
 
 Respond with a JSON array. Each item: fieldId, fieldName, currentValue, recommendation, confidence (0-1), reasoning.`;
 }
@@ -786,16 +1163,70 @@ serve(async (req) => {
 
       if (isApplicationWorkflow) {
         // APPLICATION WORKFLOW: Search for SaaS-specific fields
+        // When productUrlDomain is provided, enforce domain-only searches (except for G2 Category)
+        const enforceOfficialDomain = !!productUrlDomain;
+        console.log(`[Application] Enforce official domain only: ${enforceOfficialDomain}, domain: ${vendorDomainToUse}`);
+
         for (const field of fields) {
           const needsSearch = isApplicationSearchField(field.fieldName);
           
           if (needsSearch) {
             console.log(`[Application] Searching info for field: ${field.fieldName}`);
-            const searchQuery = buildApplicationSearchQuery(componentName, field.fieldName, vendorDomainToUse || undefined);
+            const lowerFieldName = field.fieldName.toLowerCase();
             
-            // Use fallback search for applications (broader sources acceptable)
-            const result = await searchFallback(componentName, field.fieldName, vendorDomainToUse);
-            searchResults[field.fieldId] = result;
+            // G2 Category field - always search on G2.com
+            if (isG2CategoryField(field.fieldName)) {
+              console.log(`[Application] G2 Category field - searching on G2.com`);
+              const result = await searchApplicationG2Category(componentName, vendorDomainToUse);
+              searchResults[field.fieldId] = result;
+            }
+            // SSO Provider field - search for specific SSO providers
+            else if (lowerFieldName.includes('sso') || (lowerFieldName.includes('single') && lowerFieldName.includes('sign'))) {
+              console.log(`[Application] SSO Provider field - searching for identity providers`);
+              const result = await searchApplicationSSOProviders(componentName, vendorDomainToUse, enforceOfficialDomain);
+              searchResults[field.fieldId] = result;
+            }
+            // API URL field - search for API documentation
+            else if (lowerFieldName.includes('api') && lowerFieldName.includes('url')) {
+              console.log(`[Application] API URL field - searching for API documentation`);
+              const result = await searchApplicationAPIUrl(componentName, vendorDomainToUse, enforceOfficialDomain);
+              searchResults[field.fieldId] = result;
+            }
+            // Login URL field - search for login page
+            else if (lowerFieldName.includes('login') && lowerFieldName.includes('url')) {
+              console.log(`[Application] Login URL field - searching for login page`);
+              const result = await searchApplicationLoginUrl(componentName, vendorDomainToUse, enforceOfficialDomain);
+              searchResults[field.fieldId] = result;
+            }
+            // Hosting Description field - search for infrastructure details
+            else if (lowerFieldName.includes('hosting')) {
+              console.log(`[Application] Hosting field - searching for cloud infrastructure`);
+              const result = await searchApplicationHosting(componentName, vendorDomainToUse, enforceOfficialDomain);
+              searchResults[field.fieldId] = result;
+            }
+            // Other fields - use standard search with domain enforcement
+            else {
+              const searchQuery = buildApplicationSearchQuery(componentName, field.fieldName, vendorDomainToUse || undefined, enforceOfficialDomain);
+              console.log(`[Application] Standard search: ${searchQuery}`);
+              
+              if (enforceOfficialDomain && vendorDomainToUse) {
+                // Use official-only search when domain is provided
+                const result = await searchOfficialOnly(componentName, field.fieldName, vendorDomainToUse);
+                if (result) {
+                  searchResults[field.fieldId] = result;
+                } else {
+                  // If nothing found on official domain, note that in results
+                  searchResults[field.fieldId] = {
+                    content: `No information found on official domain (${vendorDomainToUse}). Only official sources are being searched because a product URL was provided.`,
+                    urls: []
+                  };
+                }
+              } else {
+                // Use fallback search for applications (broader sources acceptable)
+                const result = await searchFallback(componentName, field.fieldName, vendorDomainToUse);
+                searchResults[field.fieldId] = result;
+              }
+            }
           }
         }
       } else {
