@@ -1769,6 +1769,26 @@ serve(async (req) => {
             continue;
           }
           
+          const lowerFieldNameCheck = field.fieldName.toLowerCase();
+          
+          // Check if this is a website field and productUrl was provided
+          const isWebsiteField = lowerFieldNameCheck.includes('website') || lowerFieldNameCheck.includes('homepage');
+          
+          // If website field and productUrl provided, use it directly (skip search)
+          if (isWebsiteField && productUrl) {
+            console.log(`[Application] Using provided product URL for ${field.fieldName}: ${productUrl}`);
+            searchResults[field.fieldId] = {
+              content: `USER-PROVIDED PRODUCT URL: ${productUrl}
+
+The user has already entered this product URL at the start of the workflow.
+You MUST recommend this exact URL: ${productUrl}
+Do NOT search for or recommend any other URL. The recommendation field value must be exactly: ${productUrl}
+This is the official product URL provided by the user.`,
+              urls: [productUrl]
+            };
+            continue;
+          }
+          
           const needsSearch = isApplicationSearchField(field.fieldName);
           
           if (needsSearch) {
@@ -1871,11 +1891,29 @@ serve(async (req) => {
             continue;
           }
           
+          // Check if this is a website field and productUrl was provided
+          const isWebsiteField = field.fieldName.toLowerCase().includes('website') || 
+                                 field.fieldName.toLowerCase().includes('homepage');
+          
+          // If website field and productUrl provided, use it directly (skip search)
+          if (isWebsiteField && productUrl) {
+            console.log(`[ITC] Using provided product URL for ${field.fieldName}: ${productUrl}`);
+            searchResults[field.fieldId] = {
+              content: `USER-PROVIDED PRODUCT URL: ${productUrl}
+
+The user has already entered this product URL at the start of the workflow.
+You MUST recommend this exact URL: ${productUrl}
+Do NOT search for or recommend any other URL. The recommendation field value must be exactly: ${productUrl}
+This is the official product URL provided by the user.`,
+              urls: [productUrl]
+            };
+            continue;
+          }
+          
           const needsSearch = isLifecycleField(field.fieldName) || 
                              field.fieldName.toLowerCase().includes('description') ||
                              field.fieldName.toLowerCase().includes('category') ||
-                             field.fieldName.toLowerCase().includes('website') ||
-                             field.fieldName.toLowerCase().includes('homepage');
+                             isWebsiteField;
           
           console.log(`Field "${field.fieldName}" - isLifecycleField: ${isLifecycleField(field.fieldName)}, needsSearch: ${needsSearch}, cacheKey: ${cacheKey}`);
           
