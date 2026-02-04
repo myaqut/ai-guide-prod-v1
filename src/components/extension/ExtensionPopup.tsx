@@ -61,8 +61,10 @@ export const ExtensionPopup = () => {
   // Chat tab visibility (can be closed and reopened)
   const [showChatTab, setShowChatTab] = useState(false);
   
-  // Persistent chat messages state
+  // Persistent chat state
   const [chatMessages, setChatMessages] = useState<ChatMessage[]>([]);
+  const [chatInput, setChatInput] = useState("");
+  const [chatDomainFilter, setChatDomainFilter] = useState("");
   
   // Settings panel visibility
   const [showSettings, setShowSettings] = useState(false);
@@ -767,6 +769,10 @@ export const ExtensionPopup = () => {
               onBack={!showBottomTabs ? () => setActiveTab(hasAnyCatalogSession ? (hasItcSession ? 'itc' : 'application') : 'workflow') : undefined}
               messages={chatMessages}
               onMessagesChange={setChatMessages}
+              input={chatInput}
+              onInputChange={setChatInput}
+              domainFilter={chatDomainFilter}
+              onDomainFilterChange={setChatDomainFilter}
             />
           </div>
         )}

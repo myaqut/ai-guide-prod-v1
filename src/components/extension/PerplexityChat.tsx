@@ -20,6 +20,10 @@ interface PerplexityChatProps {
   embedded?: boolean; // When true, fits within parent container without its own chrome
   messages?: ChatMessage[];
   onMessagesChange?: (messages: ChatMessage[]) => void;
+  input?: string;
+  onInputChange?: (input: string) => void;
+  domainFilter?: string;
+  onDomainFilterChange?: (filter: string) => void;
 }
 
 // Animated typing dots
@@ -203,15 +207,30 @@ const SuggestionCard = ({ text, onClick, delay }: { text: string; onClick: () =>
   </button>
 );
 
-export const PerplexityChat = ({ onBack, embedded = false, messages: externalMessages, onMessagesChange }: PerplexityChatProps) => {
+export const PerplexityChat = ({ 
+  onBack, 
+  embedded = false, 
+  messages: externalMessages, 
+  onMessagesChange,
+  input: externalInput,
+  onInputChange,
+  domainFilter: externalDomainFilter,
+  onDomainFilterChange
+}: PerplexityChatProps) => {
   // Use external state if provided, otherwise fall back to internal state
   const [internalMessages, setInternalMessages] = useState<ChatMessage[]>([]);
   const messages = externalMessages ?? internalMessages;
   const setMessages = onMessagesChange ?? setInternalMessages;
   
-  const [input, setInput] = useState("");
+  const [internalInput, setInternalInput] = useState("");
+  const input = externalInput ?? internalInput;
+  const setInput = onInputChange ?? setInternalInput;
+  
+  const [internalDomainFilter, setInternalDomainFilter] = useState("");
+  const domainFilter = externalDomainFilter ?? internalDomainFilter;
+  const setDomainFilter = onDomainFilterChange ?? setInternalDomainFilter;
+  
   const [isLoading, setIsLoading] = useState(false);
-  const [domainFilter, setDomainFilter] = useState("");
   const [showDomainFilter, setShowDomainFilter] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
