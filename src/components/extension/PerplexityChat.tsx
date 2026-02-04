@@ -16,7 +16,8 @@ interface ChatMessage {
 }
 
 interface PerplexityChatProps {
-  onBack: () => void;
+  onBack?: () => void;
+  embedded?: boolean; // When true, fits within parent container without its own chrome
 }
 
 // Animated typing dots
@@ -200,7 +201,7 @@ const SuggestionCard = ({ text, onClick, delay }: { text: string; onClick: () =>
   </button>
 );
 
-export const PerplexityChat = ({ onBack }: PerplexityChatProps) => {
+export const PerplexityChat = ({ onBack, embedded = false }: PerplexityChatProps) => {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [input, setInput] = useState("");
   const [isLoading, setIsLoading] = useState(false);
@@ -285,19 +286,138 @@ export const PerplexityChat = ({ onBack }: PerplexityChatProps) => {
     "What SSO providers does Salesforce support?",
   ];
 
+  // Embedded mode - no header, fits within parent
+  if (embedded) {
+    return (
+      <div className="flex flex-col flex-1 min-h-0 bg-background">
+        {/* Compact domain filter toggle */}
+        <div className="flex items-center justify-between px-3 py-2 border-b border-border bg-muted/30">
+          <div className="flex items-center gap-2">
+            <Sparkles className="h-4 w-4 text-primary" />
+            <span className="text-xs font-medium text-foreground">Research Chat</span>
+          </div>
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={() => setShowDomainFilter(!showDomainFilter)}
+            className={cn(
+              "h-6 px-2 text-[10px] gap-1 transition-colors",
+              showDomainFilter || domainFilter ? "text-primary" : "text-muted-foreground"
+            )}
+          >
+            <Globe className="h-3 w-3" />
+            Filter
+          </Button>
+        </div>
+
+        {/* Domain Filter (Collapsible) */}
+        <div className={cn(
+          "overflow-hidden transition-all duration-200 ease-out",
+          showDomainFilter ? "max-h-14 opacity-100" : "max-h-0 opacity-0"
+        )}>
+          <div className="px-3 py-2 border-b border-border bg-muted/30">
+            <Input
+              placeholder="Filter to domains: microsoft.com, oracle.com"
+              value={domainFilter}
+              onChange={(e) => setDomainFilter(e.target.value)}
+              className="h-7 text-xs bg-background/80"
+            />
+          </div>
+        </div>
+
+        {/* Messages */}
+        <ScrollArea className="flex-1 p-4" ref={scrollRef}>
+          {messages.length === 0 ? (
+            <div className="flex flex-col items-center justify-center h-full text-center px-2 animate-fade-in">
+              <div className="relative mb-4">
+                <div className="w-14 h-14 rounded-2xl bg-gradient-to-br from-primary/20 to-primary/5 flex items-center justify-center border border-primary/20">
+                  <Sparkles className="w-7 h-7 text-primary" />
+                </div>
+              </div>
+              
+              <h3 className="text-sm font-semibold text-foreground mb-1">Research Assistant</h3>
+              <p className="text-xs text-muted-foreground max-w-[200px] mb-4">
+                Ask about software, vendors, lifecycle dates, or technical docs.
+              </p>
+              
+              <div className="w-full space-y-2">
+                <p className="text-[10px] text-muted-foreground uppercase tracking-wider font-medium mb-1">
+                  Try asking
+                </p>
+                {suggestions.map((suggestion, i) => (
+                  <SuggestionCard
+                    key={i}
+                    text={suggestion}
+                    onClick={() => handleRelatedQuestion(suggestion)}
+                    delay={i * 100}
+                  />
+                ))}
+              </div>
+            </div>
+          ) : (
+            <div className="space-y-4">
+              {messages.map((message, index) => (
+                <MessageBubble
+                  key={index}
+                  message={message}
+                  index={index}
+                  onRelatedQuestion={handleRelatedQuestion}
+                />
+              ))}
+              
+              {isLoading && (
+                <div className="flex justify-start animate-fade-in">
+                  <div className="bg-card border border-border rounded-2xl rounded-bl-md shadow-sm">
+                    <TypingIndicator />
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+        </ScrollArea>
+
+        {/* Input */}
+        <div className="p-3 border-t border-border bg-card/50">
+          <div className="flex gap-2">
+            <Input
+              ref={inputRef}
+              value={input}
+              onChange={(e) => setInput(e.target.value)}
+              onKeyDown={handleKeyDown}
+              placeholder="Ask a research question..."
+              disabled={isLoading}
+              className="flex-1 h-9 text-sm rounded-xl bg-background border-border/50 focus:border-primary/50 transition-colors"
+            />
+            <Button
+              onClick={sendMessage}
+              disabled={!input.trim() || isLoading}
+              size="sm"
+              className="h-9 w-9 p-0 rounded-xl bg-gradient-to-br from-primary to-primary/90 hover:from-primary/90 hover:to-primary/80 shadow-md transition-all duration-200 disabled:opacity-50"
+            >
+              <Send className="h-4 w-4" />
+            </Button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // Standalone mode - full chrome with header
   return (
     <div className="flex flex-col h-[500px] bg-background rounded-xl border border-border shadow-xl overflow-hidden animate-scale-in" style={{ width: '360px' }}>
       {/* Header */}
       <div className="flex items-center justify-between px-4 py-3 border-b border-border bg-gradient-to-r from-card to-card/80 backdrop-blur-sm">
         <div className="flex items-center gap-3">
-          <Button
-            variant="ghost"
-            size="sm"
-            onClick={onBack}
-            className="h-8 w-8 p-0 hover:bg-muted/80 transition-colors"
-          >
-            <ArrowLeft className="h-4 w-4" />
-          </Button>
+          {onBack && (
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={onBack}
+              className="h-8 w-8 p-0 hover:bg-muted/80 transition-colors"
+            >
+              <ArrowLeft className="h-4 w-4" />
+            </Button>
+          )}
           <div className="flex items-center gap-2.5">
             <div className="relative">
               <div className="p-2 rounded-xl bg-gradient-to-br from-primary/20 to-primary/5 border border-primary/20">

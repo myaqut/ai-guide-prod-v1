@@ -439,11 +439,12 @@ export const ExtensionPopup = () => {
       return <WorkflowSelector onSelect={handleWorkflowSelect} />;
     }
     
-    // Research Chat tab
+    // Research Chat tab - use embedded mode when tabs are visible
     if (activeTab === 'chat') {
       return (
         <PerplexityChat 
-          onBack={() => setActiveTab(hasCatalogSession ? 'catalog' : 'workflow')} 
+          embedded={showBottomTabs}
+          onBack={!showBottomTabs ? () => setActiveTab(hasCatalogSession ? 'catalog' : 'workflow') : undefined} 
         />
       );
     }
