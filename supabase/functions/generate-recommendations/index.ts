@@ -378,6 +378,12 @@ function isG2CategoryField(fieldName: string): boolean {
   return lowerName.includes('g2') && lowerName.includes('category');
 }
 
+// Check if this is a G2 URL field
+function isG2UrlField(fieldName: string): boolean {
+  const lowerName = fieldName.toLowerCase();
+  return lowerName.includes('g2') && lowerName.includes('url');
+}
+
 // Check if this is a URL field that should use cached URL from date search
 function isUrlFieldForCachedDate(fieldName: string): string | null {
   // Normalize: remove parentheses, underscores, and extra spaces
@@ -1562,9 +1568,8 @@ FIELD GUIDELINES:
 - SSO Provider: List specific providers (e.g., "Okta, Azure AD, Google") or "Not supported"
 - API URL: Direct URL to API documentation, or "Not available"
 - Login URL: Direct URL to login page, or "Not available"
-- G2 Category: MUST include BOTH the category name AND the G2 URL in format: "[Category Name]; [G2 URL]"
-  Example: "Malware Analysis Tools; https://www.g2.com/products/vmray/reviews"
-  If not listed on G2, use category page: "Malware Analysis Tools; https://www.g2.com/categories/malware-analysis-tools"
+- G2 Category: The category name only (e.g., "Malware Analysis Tools", "CRM Software")
+- G2 URL: The full G2.com URL - either product page (https://www.g2.com/products/[slug]/reviews) or category page (https://www.g2.com/categories/[slug])
 
 Respond with a JSON array. Each item: fieldId, fieldName, currentValue, recommendation, confidence (0-1), reasoning.`;
 }
@@ -1719,6 +1724,21 @@ serve(async (req) => {
               console.log(`[Application] G2 Category field - searching on G2.com`);
               const result = await searchApplicationG2Category(componentName, vendorDomainToUse);
               searchResults[field.fieldId] = result;
+              // Cache for G2 URL field
+              if (result) {
+                searchResults['g2Url'] = result;
+              }
+            }
+            // G2 URL field - reuse G2 Category search results
+            else if (isG2UrlField(field.fieldName)) {
+              console.log(`[Application] G2 URL field - reusing G2 Category search`);
+              // If G2 Category was already searched, reuse; otherwise search now
+              if (!searchResults['g2Url']) {
+                const result = await searchApplicationG2Category(componentName, vendorDomainToUse);
+                searchResults[field.fieldId] = result;
+              } else {
+                searchResults[field.fieldId] = searchResults['g2Url'];
+              }
             }
             // SSO Provider field - search for specific SSO providers
             else if (lowerFieldName.includes('sso') || (lowerFieldName.includes('single') && lowerFieldName.includes('sign'))) {

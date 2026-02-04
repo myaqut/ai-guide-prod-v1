@@ -37,8 +37,10 @@ export const APPLICATION_FIELDS: FieldConfig[] = [
   { fieldId: 'dataClassification', fieldName: 'Data Classification', priority: 9, description: 'Data sensitivity level' },
   { fieldId: 'integrations', fieldName: 'Key Integrations', priority: 10, description: 'Main integrations/connections' },
   { fieldId: 'website', fieldName: 'Application Website', priority: 11, description: 'Official vendor/product URL' },
-  { fieldId: 'gdprCompliant', fieldName: 'GDPR Compliant', priority: 12, description: 'GDPR compliance status' },
-  { fieldId: 'ssoEnabled', fieldName: 'SSO Enabled', priority: 13, description: 'Single Sign-On support' },
+  { fieldId: 'g2Category', fieldName: 'G2 Category', priority: 12, description: 'Software category on G2.com' },
+  { fieldId: 'g2Url', fieldName: 'G2 URL', priority: 13, description: 'Link to G2.com product or category page' },
+  { fieldId: 'gdprCompliant', fieldName: 'GDPR Compliant', priority: 14, description: 'GDPR compliance status' },
+  { fieldId: 'ssoEnabled', fieldName: 'SSO Enabled', priority: 15, description: 'Single Sign-On support' },
 ];
 
 export function getFieldsForWorkflow(workflow: WorkflowType): FieldConfig[] {
