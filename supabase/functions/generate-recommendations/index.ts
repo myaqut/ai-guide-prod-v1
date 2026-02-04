@@ -1104,28 +1104,40 @@ async function searchApplicationG2Category(appName: string, vendorDomain: string
         messages: [
           {
             role: 'system',
-            content: `You are a software research assistant. Search for the G2 category of "${appName}".
+            content: `You are a G2.com expert. Your task is to find the EXACT G2 category for "${appName}".
 
-RULES:
-1. First search on G2.com for "${appName}"
-2. If the application IS listed on G2:
-   - Provide the exact G2 category (e.g., "CRM Software", "Project Management")
-   - Include the G2 product URL (e.g., https://www.g2.com/products/slack/reviews)
-3. If the application is NOT listed on G2:
-   - Search for similar applications in the same space
-   - Find what G2 category those similar apps are in
-   - Recommend that category and explain why
-   - Provide the G2 category page URL
-4. Always include the G2 URL in your response`
+CRITICAL INSTRUCTIONS:
+1. Search on g2.com/products for "${appName}" 
+2. The G2 product page URL format is: https://www.g2.com/products/[product-slug]/reviews
+3. The G2 category page URL format is: https://www.g2.com/categories/[category-slug]
+
+IF THE PRODUCT EXISTS ON G2:
+- Find the PRIMARY category listed on the product page
+- G2 categories are specific like: "CRM Software", "Project Management Software", "IT Service Management (ITSM) Tools", "Endpoint Protection Platforms", "Malware Analysis Tools", etc.
+- You MUST include:
+  a) The EXACT product page URL (e.g., https://www.g2.com/products/vmray/reviews)
+  b) The EXACT category page URL (e.g., https://www.g2.com/categories/malware-analysis-tools)
+
+IF THE PRODUCT IS NOT FOUND ON G2:
+- Say "Product not listed on G2"
+- Search for the most similar competing products in the same space
+- Find what G2 category those competitors are in
+- Provide the category name and the category page URL
+
+YOUR RESPONSE MUST INCLUDE:
+- Category: [exact G2 category name, be specific]
+- Product URL: [full G2 product URL] or "Not listed"  
+- Category URL: [full G2 category page URL]
+- Status: [Listed on G2 / Not Listed on G2]`
           },
           {
             role: 'user',
-            content: `Find the G2 category for "${appName}". If not on G2, find similar apps and their G2 category.`
+            content: `Search G2.com for "${appName}". Return the exact G2 category, product URL (if listed), and category page URL. Be specific with the category name.`
           }
         ],
         temperature: 0.1,
         top_p: 0.9,
-        max_tokens: 1500,
+        max_tokens: 600,
         return_images: false,
         return_related_questions: false,
         search_domain_filter: ['g2.com'],
@@ -1141,13 +1153,30 @@ RULES:
     const content = data.choices?.[0]?.message?.content || '';
     const citations = data.citations || [];
     
-    console.log(`[G2 Category] Found ${citations.length} citations`);
+    console.log(`[G2 Category] Found ${citations.length} citations, content preview: ${content.substring(0, 300)}`);
+
+    // Extract all G2 URLs from both citations and content
+    const allUrls = [...citations];
+    
+    // Extract any URLs mentioned in the content text
+    const urlMatches = content.match(/https?:\/\/(?:www\.)?g2\.com\/[^\s\)\"\'\,\]]+/g) || [];
+    for (const url of urlMatches) {
+      // Clean up URL (remove trailing punctuation)
+      const cleanUrl = url.replace(/[,.\)\]\*]+$/, '');
+      if (!allUrls.includes(cleanUrl)) {
+        allUrls.push(cleanUrl);
+      }
+    }
+    
+    console.log(`[G2 Category] All extracted URLs: ${allUrls.join(', ')}`);
 
     // Validate G2 URLs are accessible
-    const validatedUrls = await validateUrls(citations, 2);
+    const validatedUrls = await validateUrls(allUrls, 3);
+    
+    console.log(`[G2 Category] Validated URLs: ${validatedUrls.join(', ')}`);
 
     return {
-      content: `[G2.COM CATEGORY SEARCH]\n\n${content}`,
+      content: `[G2.COM CATEGORY SEARCH]\n\n${content}\n\n[VERIFIED G2 URLS]: ${validatedUrls.join(', ')}`,
       urls: validatedUrls,
       isOfficialSource: true // G2 is the authoritative source for G2 categories
     };
@@ -1533,7 +1562,9 @@ FIELD GUIDELINES:
 - SSO Provider: List specific providers (e.g., "Okta, Azure AD, Google") or "Not supported"
 - API URL: Direct URL to API documentation, or "Not available"
 - Login URL: Direct URL to login page, or "Not available"
-- G2 Category: Category from G2.com with URL, or similar app category if not listed
+- G2 Category: MUST include BOTH the category name AND the G2 URL in format: "[Category Name]; [G2 URL]"
+  Example: "Malware Analysis Tools; https://www.g2.com/products/vmray/reviews"
+  If not listed on G2, use category page: "Malware Analysis Tools; https://www.g2.com/categories/malware-analysis-tools"
 
 Respond with a JSON array. Each item: fieldId, fieldName, currentValue, recommendation, confidence (0-1), reasoning.`;
 }
