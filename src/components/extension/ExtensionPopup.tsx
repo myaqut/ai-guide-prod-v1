@@ -4,8 +4,9 @@ import { SettingsPanel } from "./SettingsPanel";
 import { RecommendationList, FieldRecommendation } from "./RecommendationList";
 import { WorkflowSelector, WorkflowType } from "./WorkflowSelector";
 import { EntryForm } from "./EntryForm";
+import { PerplexityChat } from "./PerplexityChat";
 import { generateRecommendations, FieldData, GenerateRecommendationsResult } from "@/lib/api";
-import { isValidNameFormat, getPageContext, getNameFormatGuidance } from "@/lib/workflow-config";
+import { isValidNameFormat, getPageContext, getNameFormatGuidance, getWorkflowLabel } from "@/lib/workflow-config";
 import { toast } from "sonner";
 
 // Declare chrome as a global for TypeScript
@@ -37,12 +38,19 @@ export const ExtensionPopup = () => {
   const [nameFieldStatus, setNameFieldStatus] = useState<'pending' | 'valid' | 'invalid'>('pending');
   const [urlCache, setUrlCache] = useState<Record<string, string[]>>({});
 
-  // Handle workflow selection - show entry form next
+  // Handle workflow selection - show entry form next (or chat directly)
   const handleWorkflowSelect = (workflow: WorkflowType) => {
     setWorkflowType(workflow);
     setPageContext(getPageContext(workflow));
-    setShowEntryForm(true);
-    toast.success(`${workflow === 'itc' ? 'IT Component' : 'Application'} workflow selected`);
+    
+    // For chat workflow, don't show entry form
+    if (workflow === 'chat') {
+      setShowEntryForm(false);
+      toast.success('Research Chat ready');
+    } else {
+      setShowEntryForm(true);
+      toast.success(`${getWorkflowLabel(workflow)} workflow selected`);
+    }
   };
 
   // Handle entry form submission - now we have name and optional URL
@@ -453,7 +461,14 @@ export const ExtensionPopup = () => {
     );
   }
 
-  // Show entry form after workflow selection
+  // Show chat interface for Research Chat workflow
+  if (workflowType === 'chat') {
+    return (
+      <PerplexityChat onBack={handleStartOver} />
+    );
+  }
+
+  // Show entry form after workflow selection (ITC/Application only)
   if (showEntryForm) {
     return (
       <div className="extension-popup flex flex-col bg-background overflow-hidden rounded-lg border border-border shadow-lg">
