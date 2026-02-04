@@ -209,12 +209,15 @@ export const PerplexityChat = ({ onBack, embedded = false }: PerplexityChatProps
   const [showDomainFilter, setShowDomainFilter] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
+  const messagesEndRef = useRef<HTMLDivElement>(null);
 
   // Auto-scroll to bottom when new messages arrive
+  const scrollToBottom = () => {
+    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+  };
+
   useEffect(() => {
-    if (scrollRef.current) {
-      scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
-    }
+    scrollToBottom();
   }, [messages, isLoading]);
 
   // Focus input on mount
@@ -372,6 +375,9 @@ export const PerplexityChat = ({ onBack, embedded = false }: PerplexityChatProps
                   </div>
                 </div>
               )}
+              
+              {/* Scroll anchor */}
+              <div ref={messagesEndRef} />
             </div>
           )}
         </ScrollArea>
@@ -512,6 +518,9 @@ export const PerplexityChat = ({ onBack, embedded = false }: PerplexityChatProps
                 </div>
               </div>
             )}
+            
+            {/* Scroll anchor */}
+            <div ref={messagesEndRef} />
           </div>
         )}
       </ScrollArea>
