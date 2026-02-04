@@ -42,21 +42,39 @@ interface CatalogWorkflowState {
 
 export const ExtensionPopup = () => {
   // Active tab for switching between workflows
-  const [activeTab, setActiveTab] = useState<'workflow' | 'catalog' | 'chat'>('workflow');
+  const [activeTab, setActiveTab] = useState<'workflow' | 'itc' | 'application' | 'chat'>('workflow');
   
   // Current catalog workflow being set up (null means not selected yet)
   const [pendingCatalogWorkflow, setPendingCatalogWorkflow] = useState<'itc' | 'application' | null>(null);
   
-  // Persisted catalog workflow state
-  const [catalogState, setCatalogState] = useState<CatalogWorkflowState | null>(null);
+  // Separate persisted states for ITC and Application workflows
+  const [itcState, setItcState] = useState<CatalogWorkflowState | null>(null);
+  const [applicationState, setApplicationState] = useState<CatalogWorkflowState | null>(null);
   
   // Settings panel visibility
   const [showSettings, setShowSettings] = useState(false);
   const [apiKeyConfigured, setApiKeyConfigured] = useState(true);
 
+  // Get the active catalog state based on current tab
+  const getActiveCatalogState = (): CatalogWorkflowState | null => {
+    if (activeTab === 'itc') return itcState;
+    if (activeTab === 'application') return applicationState;
+    return null;
+  };
+
+  // Set the active catalog state based on workflow type
+  const setActiveCatalogState = (workflowType: 'itc' | 'application', state: CatalogWorkflowState | null) => {
+    if (workflowType === 'itc') {
+      setItcState(state);
+    } else {
+      setApplicationState(state);
+    }
+  };
+
+  const catalogState = getActiveCatalogState();
+
   // Convenience getters for catalog state
   const workflowType = catalogState?.workflowType ?? pendingCatalogWorkflow;
-  const showEntryForm = catalogState?.showEntryForm ?? (pendingCatalogWorkflow !== null);
   const recommendations = catalogState?.recommendations ?? [];
   const isAnalyzing = catalogState?.isAnalyzing ?? false;
   const pageContext = catalogState?.pageContext ?? "LeanIX IT Component";
@@ -66,9 +84,16 @@ export const ExtensionPopup = () => {
   const nameFieldStatus = catalogState?.nameFieldStatus ?? 'pending';
   const urlCache = catalogState?.urlCache ?? {};
 
-  // Update catalog state helper
-  const updateCatalogState = (updates: Partial<CatalogWorkflowState>) => {
-    setCatalogState(prev => prev ? { ...prev, ...updates } : null);
+  // Update catalog state helper - updates the correct state based on workflow type
+  const updateCatalogState = (updates: Partial<CatalogWorkflowState>, targetWorkflow?: 'itc' | 'application') => {
+    const workflow = targetWorkflow ?? (activeTab === 'itc' ? 'itc' : activeTab === 'application' ? 'application' : null);
+    if (!workflow) return;
+    
+    if (workflow === 'itc') {
+      setItcState(prev => prev ? { ...prev, ...updates } : null);
+    } else {
+      setApplicationState(prev => prev ? { ...prev, ...updates } : null);
+    }
   };
 
   // Handle workflow selection from WorkflowSelector
@@ -78,10 +103,18 @@ export const ExtensionPopup = () => {
       setActiveTab('chat');
       toast.success('Research Chat ready');
     } else {
-      // Set up catalog workflow
-      setPendingCatalogWorkflow(workflow);
-      setActiveTab('catalog');
-      toast.success(`${getWorkflowLabel(workflow)} workflow selected`);
+      // Check if this workflow type already has an active session
+      const existingState = workflow === 'itc' ? itcState : applicationState;
+      if (existingState) {
+        // Just switch to the existing tab
+        setActiveTab(workflow);
+        toast.info(`Switched to existing ${getWorkflowLabel(workflow)} workflow`);
+      } else {
+        // Set up new catalog workflow
+        setPendingCatalogWorkflow(workflow);
+        setActiveTab(workflow);
+        toast.success(`${getWorkflowLabel(workflow)} workflow selected`);
+      }
     }
   };
 
@@ -102,8 +135,8 @@ export const ExtensionPopup = () => {
       isLoading: false
     };
     
-    // Create full catalog state
-    setCatalogState({
+    // Create full catalog state for the specific workflow
+    const newState: CatalogWorkflowState = {
       workflowType: workflow,
       showEntryForm: false,
       recommendations: [nameField],
@@ -114,7 +147,9 @@ export const ExtensionPopup = () => {
       productUrl: url,
       nameFieldStatus: 'valid',
       urlCache: {},
-    });
+    };
+    
+    setActiveCatalogState(workflow, newState);
     
     // Clear pending workflow since it's now saved
     setPendingCatalogWorkflow(null);
@@ -130,41 +165,45 @@ export const ExtensionPopup = () => {
   };
 
   // Generate recommendation for a single field
-  const generateSingleFieldRecommendation = useCallback(async (field: FieldData) => {
-    if (!catalogState) return;
+  const generateSingleFieldRecommendation = useCallback(async (field: FieldData, targetWorkflow?: 'itc' | 'application') => {
+    const state = targetWorkflow 
+      ? (targetWorkflow === 'itc' ? itcState : applicationState)
+      : catalogState;
+    if (!state) return;
     
-    console.log('[ExtensionPopup] Generating recommendation for field:', field.fieldName, 'with component:', catalogState.approvedComponentName);
-    console.log('[ExtensionPopup] Current URL cache:', catalogState.urlCache);
+    console.log('[ExtensionPopup] Generating recommendation for field:', field.fieldName, 'with component:', state.approvedComponentName);
+    console.log('[ExtensionPopup] Current URL cache:', state.urlCache);
     
     // Set this field to loading
     updateCatalogState({
-      recommendations: catalogState.recommendations.map(r => 
+      recommendations: state.recommendations.map(r => 
         r.fieldId === field.fieldId ? { ...r, isLoading: true } : r
       )
-    });
+    }, state.workflowType);
 
     try {
       // Pass the approved component name, cached URLs, and product URL to anchor the search
       const result = await generateRecommendations(
         [field], 
-        catalogState.pageContext, 
-        catalogState.approvedComponentName || undefined, 
-        catalogState.urlCache, 
-        catalogState.workflowType, 
-        catalogState.productUrl
+        state.pageContext, 
+        state.approvedComponentName || undefined, 
+        state.urlCache, 
+        state.workflowType, 
+        state.productUrl
       );
       const rec = result.recommendations.find(r => r.fieldId === field.fieldId);
       
       // Update URL cache if new URLs were returned
       const newUrlCache = result.cachedUrls 
-        ? { ...catalogState.urlCache, ...result.cachedUrls }
-        : catalogState.urlCache;
+        ? { ...state.urlCache, ...result.cachedUrls }
+        : state.urlCache;
       
       if (result.cachedUrls) {
         console.log('[ExtensionPopup] Updated URL cache:', result.cachedUrls);
       }
       
-      setCatalogState(prev => prev ? {
+      const setter = state.workflowType === 'itc' ? setItcState : setApplicationState;
+      setter(prev => prev ? {
         ...prev,
         urlCache: newUrlCache,
         recommendations: prev.recommendations.map(r => 
@@ -185,7 +224,8 @@ export const ExtensionPopup = () => {
       }
     } catch (error) {
       console.error('Error generating recommendation for field:', field.fieldId, error);
-      setCatalogState(prev => prev ? {
+      const setter = state.workflowType === 'itc' ? setItcState : setApplicationState;
+      setter(prev => prev ? {
         ...prev,
         recommendations: prev.recommendations.map(r => 
           r.fieldId === field.fieldId ? { ...r, isLoading: false } : r
@@ -193,7 +233,7 @@ export const ExtensionPopup = () => {
       } : null);
       toast.error(`Failed to get recommendation for ${field.fieldName}`);
     }
-  }, [catalogState]);
+  }, [catalogState, itcState, applicationState]);
 
   // Handle active field change from content script - fetch recommendation for that field only
   const handleActiveFieldChange = useCallback((field: FieldData) => {
@@ -202,8 +242,10 @@ export const ExtensionPopup = () => {
     console.log('[ExtensionPopup] Active field changed:', field.fieldName, field.fieldId);
     
     const isNameField = field.fieldName?.toLowerCase() === 'name';
+    const workflow = catalogState.workflowType;
+    const setter = workflow === 'itc' ? setItcState : setApplicationState;
     
-    setCatalogState(prev => {
+    setter(prev => {
       if (!prev) return null;
       
       const existingIndex = prev.recommendations.findIndex(r => r.fieldId === field.fieldId);
@@ -215,7 +257,7 @@ export const ExtensionPopup = () => {
         
         if (!existing.recommendation && !existing.isLoading) {
           if (prev.approvedComponentName || isNameField) {
-            setTimeout(() => generateSingleFieldRecommendation(field), 0);
+            setTimeout(() => generateSingleFieldRecommendation(field, workflow), 0);
           }
         }
         
@@ -228,7 +270,7 @@ export const ExtensionPopup = () => {
         };
         
         if (shouldGenerate) {
-          setTimeout(() => generateSingleFieldRecommendation(field), 0);
+          setTimeout(() => generateSingleFieldRecommendation(field, workflow), 0);
         }
         
         return { ...prev, activeFieldId: field.fieldId, recommendations: [newField, ...prev.recommendations] };
@@ -271,13 +313,15 @@ export const ExtensionPopup = () => {
   const handleGenerateRecommendations = async () => {
     if (!catalogState) return;
     
+    const workflow = catalogState.workflowType;
+    
     console.log('Generate recommendations clicked!');
-    updateCatalogState({ isAnalyzing: true });
+    updateCatalogState({ isAnalyzing: true }, workflow);
     
     // Set all fields to loading
     updateCatalogState({
       recommendations: catalogState.recommendations.map(r => ({ ...r, isLoading: true, recommendation: undefined }))
-    });
+    }, workflow);
 
     try {
       const fieldsToAnalyze = catalogState.recommendations.map(r => ({
@@ -312,7 +356,8 @@ export const ExtensionPopup = () => {
         };
       });
 
-      setCatalogState(prev => prev ? {
+      const setter = workflow === 'itc' ? setItcState : setApplicationState;
+      setter(prev => prev ? {
         ...prev,
         isAnalyzing: false,
         urlCache: newUrlCache,
@@ -326,12 +371,15 @@ export const ExtensionPopup = () => {
       updateCatalogState({
         isAnalyzing: false,
         recommendations: catalogState.recommendations.map(r => ({ ...r, isLoading: false }))
-      });
+      }, workflow);
     }
   };
 
   const handleApply = async (fieldId: string, value: string) => {
     if (!catalogState) return;
+    
+    const workflow = catalogState.workflowType;
+    const setter = workflow === 'itc' ? setItcState : setApplicationState;
     
     console.log('Applying recommendation:', fieldId, value);
     
@@ -342,11 +390,11 @@ export const ExtensionPopup = () => {
         updateCatalogState({ 
           approvedComponentName: value,
           nameFieldStatus: 'valid'
-        });
+        }, workflow);
         toast.success(`${catalogState.workflowType === 'application' ? 'Application' : 'Component'} name approved: ${value}`);
       } else {
         console.log('[ExtensionPopup] Name format invalid:', value);
-        updateCatalogState({ nameFieldStatus: 'invalid' });
+        updateCatalogState({ nameFieldStatus: 'invalid' }, workflow);
         const guidance = getNameFormatGuidance(catalogState.workflowType);
         toast.warning(`Name format should be: ${guidance}`);
       }
@@ -369,7 +417,7 @@ export const ExtensionPopup = () => {
               
               if (response?.success) {
                 toast.success(`Applied recommendation to ${fieldId}`);
-                setCatalogState(prev => prev ? {
+                setter(prev => prev ? {
                   ...prev,
                   recommendations: prev.recommendations.map(r =>
                     r.fieldId === fieldId ? { ...r, currentValue: value } : r
@@ -387,7 +435,7 @@ export const ExtensionPopup = () => {
       }
     } else {
       toast.success(`Applied recommendation to ${fieldId}`);
-      setCatalogState(prev => prev ? {
+      setter(prev => prev ? {
         ...prev,
         recommendations: prev.recommendations.map(r =>
           r.fieldId === fieldId ? { ...r, currentValue: value } : r
@@ -397,8 +445,12 @@ export const ExtensionPopup = () => {
   };
 
   const handleEditValue = (fieldId: string, value: string) => {
+    if (!catalogState) return;
+    const workflow = catalogState.workflowType;
+    const setter = workflow === 'itc' ? setItcState : setApplicationState;
+    
     console.log('[ExtensionPopup] Manual edit - updating field value:', fieldId, value);
-    setCatalogState(prev => prev ? {
+    setter(prev => prev ? {
       ...prev,
       recommendations: prev.recommendations.map(r =>
         r.fieldId === fieldId ? { ...r, recommendation: value } : r
@@ -407,35 +459,65 @@ export const ExtensionPopup = () => {
   };
 
   const handleRemoveField = (fieldId: string) => {
-    setCatalogState(prev => prev ? {
+    if (!catalogState) return;
+    const workflow = catalogState.workflowType;
+    const setter = workflow === 'itc' ? setItcState : setApplicationState;
+    
+    setter(prev => prev ? {
       ...prev,
       recommendations: prev.recommendations.filter(r => r.fieldId !== fieldId)
     } : null);
     toast.info("Field removed");
   };
 
-  const handleStartOver = () => {
-    setCatalogState(null);
-    setPendingCatalogWorkflow(null);
-    setActiveTab('workflow');
-    toast.success("Starting over - select a workflow");
+  // Close a specific workflow tab
+  const handleCloseWorkflow = (workflow: 'itc' | 'application') => {
+    if (workflow === 'itc') {
+      setItcState(null);
+    } else {
+      setApplicationState(null);
+    }
+    
+    // If we're closing the active tab, switch to another tab
+    if (activeTab === workflow) {
+      if (workflow === 'itc' && applicationState) {
+        setActiveTab('application');
+      } else if (workflow === 'application' && itcState) {
+        setActiveTab('itc');
+      } else {
+        setActiveTab('chat');
+      }
+    }
+    
+    toast.success(`${workflow === 'itc' ? 'IT Component' : 'Application'} workflow closed`);
   };
 
   const handleBackFromEntry = () => {
     setPendingCatalogWorkflow(null);
-    setActiveTab('workflow');
+    // Go back to workflow selector if no active sessions
+    if (!itcState && !applicationState) {
+      setActiveTab('workflow');
+    } else if (itcState) {
+      setActiveTab('itc');
+    } else if (applicationState) {
+      setActiveTab('application');
+    } else {
+      setActiveTab('chat');
+    }
   };
 
-  // Determine if we have an active catalog session
-  const hasCatalogSession = catalogState !== null;
+  // Determine if we have any active catalog sessions
+  const hasItcSession = itcState !== null;
+  const hasApplicationSession = applicationState !== null;
+  const hasAnyCatalogSession = hasItcSession || hasApplicationSession;
   
-  // Show tabs only when we have at least one active workflow
-  const showBottomTabs = hasCatalogSession || activeTab === 'chat';
+  // Show tabs when we have at least one active workflow or pending workflow
+  const showBottomTabs = hasAnyCatalogSession || pendingCatalogWorkflow !== null || activeTab === 'chat';
 
   // Render content based on active tab
   const renderContent = () => {
     // Workflow selector (initial state or when explicitly on workflow tab without sessions)
-    if (activeTab === 'workflow' && !hasCatalogSession) {
+    if (activeTab === 'workflow' && !hasAnyCatalogSession && !pendingCatalogWorkflow) {
       return <WorkflowSelector onSelect={handleWorkflowSelect} />;
     }
     
@@ -444,15 +526,17 @@ export const ExtensionPopup = () => {
       return (
         <PerplexityChat 
           embedded={showBottomTabs}
-          onBack={!showBottomTabs ? () => setActiveTab(hasCatalogSession ? 'catalog' : 'workflow') : undefined} 
+          onBack={!showBottomTabs ? () => setActiveTab(hasAnyCatalogSession ? (hasItcSession ? 'itc' : 'application') : 'workflow') : undefined} 
         />
       );
     }
     
-    // Catalog tab - show entry form if pending workflow
-    if (activeTab === 'catalog') {
+    // ITC or Application tab
+    if (activeTab === 'itc' || activeTab === 'application') {
+      const state = activeTab === 'itc' ? itcState : applicationState;
+      
       // If we're setting up a new catalog workflow
-      if (pendingCatalogWorkflow && !catalogState) {
+      if (pendingCatalogWorkflow === activeTab && !state) {
         return (
           <EntryForm 
             workflowType={pendingCatalogWorkflow}
@@ -463,7 +547,7 @@ export const ExtensionPopup = () => {
       }
       
       // Show active catalog workflow
-      if (catalogState) {
+      if (state) {
         if (showSettings) {
           return (
             <SettingsPanel
@@ -478,18 +562,18 @@ export const ExtensionPopup = () => {
           <>
             <Header
               onSettingsClick={() => setShowSettings(true)}
-              onStartOver={handleStartOver}
+              onStartOver={() => handleCloseWorkflow(activeTab)}
               isConnected={apiKeyConfigured}
             />
             <RecommendationList
-              recommendations={catalogState.recommendations}
-              isAnalyzing={catalogState.isAnalyzing}
+              recommendations={state.recommendations}
+              isAnalyzing={state.isAnalyzing}
               onRefresh={handleGenerateRecommendations}
               onRefreshField={handleRefreshField}
               onApply={handleApply}
               onEditValue={handleEditValue}
               onRemoveField={handleRemoveField}
-              activeFieldId={catalogState.activeFieldId}
+              activeFieldId={state.activeFieldId}
             />
           </>
         );
@@ -500,24 +584,8 @@ export const ExtensionPopup = () => {
     return <WorkflowSelector onSelect={handleWorkflowSelect} />;
   };
 
-  // Get tab label for catalog workflow
-  const getCatalogTabLabel = () => {
-    if (catalogState) {
-      return catalogState.workflowType === 'itc' ? 'IT Component' : 'Application';
-    }
-    if (pendingCatalogWorkflow) {
-      return pendingCatalogWorkflow === 'itc' ? 'IT Component' : 'Application';
-    }
-    return 'Catalog';
-  };
-
-  const getCatalogTabIcon = () => {
-    const type = catalogState?.workflowType ?? pendingCatalogWorkflow;
-    if (type === 'application') {
-      return <Cloud className="h-4 w-4" />;
-    }
-    return <Monitor className="h-4 w-4" />;
-  };
+  // Check if we can open a new workflow (both aren't already open)
+  const canOpenNewWorkflow = !hasItcSession || !hasApplicationSession;
 
   // Chrome-style tab component
   const ChromeTab = ({ 
@@ -594,23 +662,52 @@ export const ExtensionPopup = () => {
       {/* Chrome-style tab bar at top when we have active sessions */}
       {showBottomTabs && (
         <div className="flex items-end gap-0.5 px-2 pt-2 bg-muted/30 border-b border-border">
-          {(hasCatalogSession || pendingCatalogWorkflow) && (
+          {/* ITC Tab */}
+          {(hasItcSession || pendingCatalogWorkflow === 'itc') && (
             <ChromeTab
-              active={activeTab === 'catalog'}
-              icon={getCatalogTabIcon()}
-              label={getCatalogTabLabel()}
-              onClick={() => setActiveTab('catalog')}
-              onClose={handleStartOver}
+              active={activeTab === 'itc'}
+              icon={<Monitor className="h-4 w-4" />}
+              label="IT Component"
+              onClick={() => setActiveTab('itc')}
+              onClose={() => {
+                if (pendingCatalogWorkflow === 'itc') {
+                  setPendingCatalogWorkflow(null);
+                  setActiveTab(hasApplicationSession ? 'application' : 'chat');
+                } else {
+                  handleCloseWorkflow('itc');
+                }
+              }}
             />
           )}
+          
+          {/* Application Tab */}
+          {(hasApplicationSession || pendingCatalogWorkflow === 'application') && (
+            <ChromeTab
+              active={activeTab === 'application'}
+              icon={<Cloud className="h-4 w-4" />}
+              label="Application"
+              onClick={() => setActiveTab('application')}
+              onClose={() => {
+                if (pendingCatalogWorkflow === 'application') {
+                  setPendingCatalogWorkflow(null);
+                  setActiveTab(hasItcSession ? 'itc' : 'chat');
+                } else {
+                  handleCloseWorkflow('application');
+                }
+              }}
+            />
+          )}
+          
+          {/* Research Chat Tab */}
           <ChromeTab
             active={activeTab === 'chat'}
             icon={<Sparkles className="h-4 w-4" />}
             label="Research Chat"
             onClick={() => setActiveTab('chat')}
           />
+          
           {/* New tab button - only when not all workflows are open */}
-          {!hasCatalogSession && activeTab !== 'workflow' && (
+          {canOpenNewWorkflow && activeTab !== 'workflow' && (
             <NewTabButton onClick={() => setActiveTab('workflow')} />
           )}
         </div>
