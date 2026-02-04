@@ -8,8 +8,8 @@ import { PerplexityChat } from "./PerplexityChat";
 import { generateRecommendations, FieldData, GenerateRecommendationsResult } from "@/lib/api";
 import { isValidNameFormat, getPageContext, getNameFormatGuidance, getWorkflowLabel } from "@/lib/workflow-config";
 import { toast } from "sonner";
-import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
-import { Monitor, Cloud, Sparkles } from "lucide-react";
+import { Monitor, Cloud, Sparkles, X, Plus } from "lucide-react";
+import { cn } from "@/lib/utils";
 
 // Declare chrome as a global for TypeScript
 declare const chrome: any;
@@ -518,37 +518,106 @@ export const ExtensionPopup = () => {
     return <Monitor className="h-4 w-4" />;
   };
 
+  // Chrome-style tab component
+  const ChromeTab = ({ 
+    active, 
+    icon, 
+    label, 
+    onClick, 
+    onClose 
+  }: { 
+    active: boolean; 
+    icon: React.ReactNode; 
+    label: string; 
+    onClick: () => void;
+    onClose?: () => void;
+  }) => (
+    <div 
+      className={cn(
+        "relative flex items-center gap-2 px-3 py-2 cursor-pointer transition-all duration-150 group min-w-[100px] max-w-[180px]",
+        "rounded-t-lg border-x border-t",
+        active 
+          ? "bg-background border-border z-10 -mb-px" 
+          : "bg-muted/50 border-transparent hover:bg-muted/80"
+      )}
+      onClick={onClick}
+    >
+      <span className={cn(
+        "transition-colors",
+        active ? "text-primary" : "text-muted-foreground group-hover:text-foreground"
+      )}>
+        {icon}
+      </span>
+      <span className={cn(
+        "text-xs font-medium truncate flex-1",
+        active ? "text-foreground" : "text-muted-foreground group-hover:text-foreground"
+      )}>
+        {label}
+      </span>
+      {onClose && (
+        <button
+          onClick={(e) => {
+            e.stopPropagation();
+            onClose();
+          }}
+          className={cn(
+            "p-0.5 rounded-sm transition-colors",
+            "opacity-0 group-hover:opacity-100",
+            active && "opacity-100",
+            "hover:bg-muted-foreground/20"
+          )}
+        >
+          <X className="h-3 w-3 text-muted-foreground hover:text-foreground" />
+        </button>
+      )}
+      {/* Active tab connector line */}
+      {active && (
+        <div className="absolute bottom-0 left-0 right-0 h-px bg-background" />
+      )}
+    </div>
+  );
+
+  // New tab button
+  const NewTabButton = ({ onClick }: { onClick: () => void }) => (
+    <button
+      onClick={onClick}
+      className="p-2 rounded-md hover:bg-muted/80 transition-colors text-muted-foreground hover:text-foreground"
+      title="New workflow"
+    >
+      <Plus className="h-4 w-4" />
+    </button>
+  );
+
   return (
     <div className="extension-popup flex flex-col bg-background overflow-hidden rounded-lg border border-border shadow-lg">
+      {/* Chrome-style tab bar at top when we have active sessions */}
+      {showBottomTabs && (
+        <div className="flex items-end gap-0.5 px-2 pt-2 bg-muted/30 border-b border-border">
+          {(hasCatalogSession || pendingCatalogWorkflow) && (
+            <ChromeTab
+              active={activeTab === 'catalog'}
+              icon={getCatalogTabIcon()}
+              label={getCatalogTabLabel()}
+              onClick={() => setActiveTab('catalog')}
+              onClose={handleStartOver}
+            />
+          )}
+          <ChromeTab
+            active={activeTab === 'chat'}
+            icon={<Sparkles className="h-4 w-4" />}
+            label="Research Chat"
+            onClick={() => setActiveTab('chat')}
+          />
+          {/* New tab button - only when not all workflows are open */}
+          {!hasCatalogSession && activeTab !== 'workflow' && (
+            <NewTabButton onClick={() => setActiveTab('workflow')} />
+          )}
+        </div>
+      )}
+      
       <div className="flex-1 min-h-0 overflow-hidden flex flex-col">
         {renderContent()}
       </div>
-      
-      {/* Bottom tabs - only show when we have active sessions */}
-      {showBottomTabs && (
-        <div className="border-t border-border bg-muted/30">
-          <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as 'catalog' | 'chat')}>
-            <TabsList className="w-full h-12 rounded-none bg-transparent p-1 gap-1">
-              {(hasCatalogSession || pendingCatalogWorkflow) && (
-                <TabsTrigger 
-                  value="catalog" 
-                  className="flex-1 gap-2 data-[state=active]:bg-background data-[state=active]:shadow-sm"
-                >
-                  {getCatalogTabIcon()}
-                  <span className="text-xs">{getCatalogTabLabel()}</span>
-                </TabsTrigger>
-              )}
-              <TabsTrigger 
-                value="chat" 
-                className="flex-1 gap-2 data-[state=active]:bg-background data-[state=active]:shadow-sm"
-              >
-                <Sparkles className="h-4 w-4" />
-                <span className="text-xs">Research Chat</span>
-              </TabsTrigger>
-            </TabsList>
-          </Tabs>
-        </div>
-      )}
     </div>
   );
 };
