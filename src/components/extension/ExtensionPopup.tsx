@@ -536,64 +536,55 @@ export const ExtensionPopup = () => {
     toast.success('Research Chat closed');
   };
 
-  // Render content based on active tab
-  const renderContent = () => {
-    // Workflow selector (initial state or when explicitly on workflow tab without sessions)
-    if (activeTab === 'workflow' && !hasAnyCatalogSession && !pendingCatalogWorkflow) {
-      return <WorkflowSelector onSelect={handleWorkflowSelect} />;
+  // Render catalog workflow content for a specific tab type
+  const renderCatalogContent = (tabType: 'itc' | 'application') => {
+    const state = tabType === 'itc' ? itcState : applicationState;
+    
+    // If we're setting up a new catalog workflow
+    if (pendingCatalogWorkflow === tabType && !state) {
+      return (
+        <EntryForm 
+          workflowType={pendingCatalogWorkflow}
+          onSubmit={handleEntrySubmit}
+          onBack={handleBackFromEntry}
+        />
+      );
     }
     
-    // ITC or Application tab
-    if (activeTab === 'itc' || activeTab === 'application') {
-      const state = activeTab === 'itc' ? itcState : applicationState;
-      
-      // If we're setting up a new catalog workflow
-      if (pendingCatalogWorkflow === activeTab && !state) {
+    // Show active catalog workflow
+    if (state) {
+      if (showSettings && activeTab === tabType) {
         return (
-          <EntryForm 
-            workflowType={pendingCatalogWorkflow}
-            onSubmit={handleEntrySubmit}
-            onBack={handleBackFromEntry}
+          <SettingsPanel
+            onBack={() => setShowSettings(false)}
+            apiKey=""
+            onSaveApiKey={() => {}}
           />
         );
       }
       
-      // Show active catalog workflow
-      if (state) {
-        if (showSettings) {
-          return (
-            <SettingsPanel
-              onBack={() => setShowSettings(false)}
-              apiKey=""
-              onSaveApiKey={() => {}}
-            />
-          );
-        }
-        
-        return (
-          <>
-            <Header
-              onSettingsClick={() => setShowSettings(true)}
-              onStartOver={() => handleCloseWorkflow(activeTab)}
-              isConnected={apiKeyConfigured}
-            />
-            <RecommendationList
-              recommendations={state.recommendations}
-              isAnalyzing={state.isAnalyzing}
-              onRefresh={handleGenerateRecommendations}
-              onRefreshField={handleRefreshField}
-              onApply={handleApply}
-              onEditValue={handleEditValue}
-              onRemoveField={handleRemoveField}
-              activeFieldId={state.activeFieldId}
-            />
-          </>
-        );
-      }
+      return (
+        <>
+          <Header
+            onSettingsClick={() => setShowSettings(true)}
+            onStartOver={() => handleCloseWorkflow(tabType)}
+            isConnected={apiKeyConfigured}
+          />
+          <RecommendationList
+            recommendations={state.recommendations}
+            isAnalyzing={state.isAnalyzing}
+            onRefresh={handleGenerateRecommendations}
+            onRefreshField={handleRefreshField}
+            onApply={handleApply}
+            onEditValue={handleEditValue}
+            onRemoveField={handleRemoveField}
+            activeFieldId={state.activeFieldId}
+          />
+        </>
+      );
     }
     
-    // Default - show workflow selector
-    return <WorkflowSelector onSelect={handleWorkflowSelect} />;
+    return null;
   };
 
   // Check if we can open a new workflow (both aren't already open)
@@ -748,10 +739,32 @@ export const ExtensionPopup = () => {
       )}
       
       <div className="flex-1 min-h-0 overflow-hidden flex flex-col relative">
-        {/* Other content */}
-        {activeTab !== 'chat' && renderContent()}
+        {/* Workflow selector - only rendered when active */}
+        {activeTab === 'workflow' && !hasAnyCatalogSession && !pendingCatalogWorkflow && (
+          <WorkflowSelector onSelect={handleWorkflowSelect} />
+        )}
         
-        {/* Always render PerplexityChat when showChatTab is true, but hide with CSS when not active */}
+        {/* ITC Tab - always rendered when session exists, visibility controlled by CSS */}
+        {(hasItcSession || pendingCatalogWorkflow === 'itc') && (
+          <div className={cn(
+            "absolute inset-0 flex flex-col bg-background overflow-hidden",
+            activeTab === 'itc' ? "z-10 visible" : "z-0 invisible pointer-events-none"
+          )}>
+            {renderCatalogContent('itc')}
+          </div>
+        )}
+        
+        {/* Application Tab - always rendered when session exists, visibility controlled by CSS */}
+        {(hasApplicationSession || pendingCatalogWorkflow === 'application') && (
+          <div className={cn(
+            "absolute inset-0 flex flex-col bg-background overflow-hidden",
+            activeTab === 'application' ? "z-10 visible" : "z-0 invisible pointer-events-none"
+          )}>
+            {renderCatalogContent('application')}
+          </div>
+        )}
+        
+        {/* Research Chat - always rendered when showChatTab is true, visibility controlled by CSS */}
         {showChatTab && (
           <div className={cn(
             "absolute inset-0 flex flex-col bg-background",
