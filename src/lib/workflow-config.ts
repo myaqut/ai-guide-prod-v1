@@ -1,5 +1,5 @@
 // Workflow type definitions
-export type WorkflowType = 'itc' | 'application' | 'chat';
+export type WorkflowType = 'itc' | 'application' | 'provider' | 'chat';
 
 // Field configurations for each workflow type
 export interface FieldConfig {
@@ -43,46 +43,69 @@ export const APPLICATION_FIELDS: FieldConfig[] = [
   { fieldId: 'ssoEnabled', fieldName: 'SSO Enabled', priority: 15, description: 'Single Sign-On support' },
 ];
 
+// Provider (Company Research) fields - new implementation
+export const PROVIDER_FIELDS: FieldConfig[] = [
+  { fieldId: 'name', fieldName: 'Company Name', priority: 1, description: 'Official company name' },
+  { fieldId: 'description', fieldName: 'Description', priority: 2, description: 'Short company description (max 200 characters)' },
+  { fieldId: 'foundationDate', fieldName: 'Foundation Date', priority: 3, description: 'Year or date the company was founded' },
+  { fieldId: 'homepage', fieldName: 'Homepage URL', priority: 4, description: 'Official company website' },
+  { fieldId: 'announcementPage', fieldName: 'Announcement Page', priority: 5, description: 'News, press releases, or blog page' },
+  { fieldId: 'supportEmail', fieldName: 'Support Email', priority: 6, description: 'Customer support email address' },
+  { fieldId: 'supportPage', fieldName: 'Support Page', priority: 7, description: 'Customer support or help center URL' },
+  { fieldId: 'contactPage', fieldName: 'Contact Us Page', priority: 8, description: 'Contact page URL' },
+  { fieldId: 'headquartersAddress', fieldName: 'Headquarters Address', priority: 9, description: 'Full address in one line' },
+  { fieldId: 'headquartersCity', fieldName: 'Headquarters City', priority: 10, description: 'City where headquarters is located' },
+  { fieldId: 'headquartersCountry', fieldName: 'Headquarters Country', priority: 11, description: 'Country where headquarters is located' },
+  { fieldId: 'phoneNumber', fieldName: 'Phone Number', priority: 12, description: 'Main company phone number' },
+];
+
 export function getFieldsForWorkflow(workflow: WorkflowType): FieldConfig[] {
   if (workflow === 'chat') return []; // Chat doesn't have fields
-  return workflow === 'itc' ? ITC_FIELDS : APPLICATION_FIELDS;
+  if (workflow === 'itc') return ITC_FIELDS;
+  if (workflow === 'application') return APPLICATION_FIELDS;
+  return PROVIDER_FIELDS;
 }
 
 export function getWorkflowLabel(workflow: WorkflowType): string {
   if (workflow === 'chat') return 'Research Chat';
-  return workflow === 'itc' ? 'IT Component' : 'Application';
+  if (workflow === 'itc') return 'IT Component';
+  if (workflow === 'application') return 'Application';
+  return 'Provider';
 }
 
 export function getPageContext(workflow: WorkflowType): string {
   if (workflow === 'chat') return 'Research Chat';
-  return workflow === 'itc' ? 'LeanIX IT Component' : 'LeanIX Application';
+  if (workflow === 'itc') return 'LeanIX IT Component';
+  if (workflow === 'application') return 'LeanIX Application';
+  return 'LeanIX Provider';
 }
 
 // Name validation patterns differ by workflow
-// New format: [Company Name] + [Component/Application Name] (+ [Version] for ITC)
 export function isValidNameFormat(name: string, workflow: WorkflowType): boolean {
   if (!name || name.trim().length < 3) return false;
   
-  const parts = name.trim().split(/\s+/);
-  
-  // Must have at least 2 parts (Company + Product)
-  if (parts.length < 2) return false;
-  
-  // First part should be capitalized (company name)
-  const hasCompany = /^[A-Z]/.test(parts[0]);
-  if (!hasCompany) return false;
-  
   if (workflow === 'chat') return true; // Chat doesn't need name validation
   
+  // Provider workflow: Just need a company name (at least 2 chars)
+  if (workflow === 'provider') {
+    return name.trim().length >= 2;
+  }
+  
+  const parts = name.trim().split(/\s+/);
+  
   if (workflow === 'itc') {
+    // ITC: Must have at least 2 parts (Company + Product)
+    if (parts.length < 2) return false;
+    // First part should be capitalized (company name)
+    if (!/^[A-Z]/.test(parts[0])) return false;
     // ITC: Company + Product + Version pattern (version can be numbers, x.x format, or year)
-    // Examples: "Microsoft SQL Server 2022", "MongoDB Community Server 8.2", "Apache Kafka 3.6.0"
     const lastPart = parts[parts.length - 1];
     const hasVersion = /\d/.test(lastPart);
     return hasVersion;
   } else {
     // Application: Company + Product Name (no version needed for SaaS)
-    // Examples: "Salesforce Sales Cloud", "Microsoft Teams", "Slack Enterprise Grid"
+    if (parts.length < 2) return false;
+    if (!/^[A-Z]/.test(parts[0])) return false;
     return parts.length >= 2 && name.trim().length >= 5;
   }
 }
@@ -90,6 +113,9 @@ export function isValidNameFormat(name: string, workflow: WorkflowType): boolean
 export function getNameFormatGuidance(workflow: WorkflowType): string {
   if (workflow === 'chat') {
     return 'Research Chat - ask any question';
+  }
+  if (workflow === 'provider') {
+    return 'Enter the company name. Example: "Microsoft" or "Salesforce"';
   }
   if (workflow === 'itc') {
     return 'Name should follow: [Company] + [Product] + [Version]. Example: "Microsoft SQL Server 2022"';

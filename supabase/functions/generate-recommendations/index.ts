@@ -81,7 +81,7 @@ const RequestSchema = z.object({
   pageContext: z.string().max(500, 'pageContext must be at most 500 characters').optional(),
   componentName: z.string().max(300, 'componentName must be at most 300 characters').optional(),
   cachedUrls: CachedUrlsSchema,
-  workflowType: z.enum(['itc', 'application']).default('itc'),
+  workflowType: z.enum(['itc', 'application', 'provider']).default('itc'),
   productUrl: z.string().max(2000, 'productUrl must be at most 2000 characters').optional().refine(
     (url) => !url || isValidUrl(url),
     { message: 'productUrl must be a valid URL' }
@@ -244,7 +244,7 @@ async function validateUrls(urls: string[], maxConcurrent: number = 3): Promise<
 }
 
 // Workflow types
-type WorkflowType = 'itc' | 'application';
+type WorkflowType = 'itc' | 'application' | 'provider';
 
 interface FieldData {
   fieldId: string;
@@ -1688,6 +1688,254 @@ FIELD GUIDELINES:
 Respond with a JSON array. Each item: fieldId, fieldName, currentValue, recommendation, confidence (0-1), reasoning.`;
 }
 
+// Build system prompt for Provider (Company Research) workflow
+function buildProviderSystemPrompt(companyName: string | null, searchContext: string): string {
+  return `You are an AI assistant specialized in company research. Your job is to find accurate information about companies/vendors.
+
+CRITICAL - COMPANY IDENTITY ANCHOR:
+${companyName ? `- The company being researched is: "${companyName}"
+- ALL your recommendations MUST be specifically about "${companyName}" and NO other company` : '- No company name provided yet.'}
+
+${searchContext}
+
+FIELD GUIDELINES:
+- Company Name: Official legal company name
+- Description: Max 200 characters, what the company does, their main products/services
+- Foundation Date: Year founded (e.g., "1975" or "April 1975")
+- Homepage URL: Official company website (e.g., https://www.microsoft.com)
+- Announcement Page: News, press releases, or blog page URL. If no dedicated news page, use blog page
+- Support Email: Customer support email address, or "Not publicly available"
+- Support Page: Customer support/help center URL, or "Not available"
+- Contact Us Page: Contact page URL
+- Headquarters Address: Full address in one line (e.g., "One Microsoft Way, Redmond, WA 98052, USA")
+- Headquarters City: City name only (e.g., "Redmond")
+- Headquarters Country: Country name only (e.g., "United States")
+- Phone Number: Main company phone number, or "Not publicly available"
+
+IMPORTANT SOURCING RULES:
+1. ONLY use information from official sources: the company's official website or official LinkedIn page
+2. For contact information, prefer the official "Contact Us" or "About" page
+3. If information is not available on official sources, state "Not available" or "Not publicly available"
+4. Include the source URL in your reasoning
+
+Respond with a JSON array. Each item: fieldId, fieldName, currentValue, recommendation, confidence (0-1), reasoning.`;
+}
+
+// Build search queries for Provider workflow fields
+function buildProviderSearchQuery(companyName: string, fieldName: string): string {
+  const lowerFieldName = fieldName.toLowerCase();
+  
+  // Description
+  if (lowerFieldName.includes('description')) {
+    return `"${companyName}" company about what does ${companyName} do official website`;
+  }
+  
+  // Foundation Date
+  if (lowerFieldName.includes('foundation') || lowerFieldName.includes('founded')) {
+    return `"${companyName}" founded year when was ${companyName} founded history official`;
+  }
+  
+  // Homepage URL
+  if (lowerFieldName.includes('homepage') || (lowerFieldName.includes('home') && lowerFieldName.includes('url'))) {
+    return `"${companyName}" official website homepage`;
+  }
+  
+  // Announcement/News Page
+  if (lowerFieldName.includes('announcement') || lowerFieldName.includes('news') || lowerFieldName.includes('blog')) {
+    return `"${companyName}" official news press releases blog announcements page site:${companyName.toLowerCase().replace(/\s+/g, '')}.com OR site:${companyName.toLowerCase().split(' ')[0]}.com`;
+  }
+  
+  // Support Email
+  if (lowerFieldName.includes('support') && lowerFieldName.includes('email')) {
+    return `"${companyName}" support email contact customer service email address official`;
+  }
+  
+  // Support Page
+  if (lowerFieldName.includes('support') && (lowerFieldName.includes('page') || lowerFieldName.includes('url'))) {
+    return `"${companyName}" help center support page customer service official`;
+  }
+  
+  // Contact Us Page
+  if (lowerFieldName.includes('contact')) {
+    return `"${companyName}" contact us page official website`;
+  }
+  
+  // Headquarters Address
+  if (lowerFieldName.includes('headquarters') && lowerFieldName.includes('address')) {
+    return `"${companyName}" headquarters address office location official`;
+  }
+  
+  // Headquarters City
+  if (lowerFieldName.includes('headquarters') && lowerFieldName.includes('city')) {
+    return `"${companyName}" headquarters city where is ${companyName} headquartered`;
+  }
+  
+  // Headquarters Country
+  if (lowerFieldName.includes('headquarters') && lowerFieldName.includes('country')) {
+    return `"${companyName}" headquarters country where is ${companyName} based`;
+  }
+  
+  // Phone Number
+  if (lowerFieldName.includes('phone')) {
+    return `"${companyName}" phone number contact telephone official`;
+  }
+  
+  // Default
+  return `"${companyName}" company official information`;
+}
+
+// Check if field needs search for Provider workflow
+function isProviderSearchField(fieldName: string): boolean {
+  const searchableFields = [
+    'description', 'foundation', 'founded', 'homepage', 'announcement', 'news', 'blog',
+    'support', 'contact', 'headquarters', 'address', 'city', 'country', 'phone'
+  ];
+  const lowerName = fieldName.toLowerCase();
+  return searchableFields.some(keyword => lowerName.includes(keyword));
+}
+
+// Search for Provider company info
+async function searchProviderInfo(companyName: string, fieldName: string): Promise<PerplexitySearchResultWithQuality | null> {
+  if (!PERPLEXITY_API_KEY) {
+    console.log('Perplexity API key not configured, skipping web search');
+    return null;
+  }
+
+  try {
+    const searchQuery = buildProviderSearchQuery(companyName, fieldName);
+    console.log(`[Provider] Searching for ${fieldName}: ${searchQuery}`);
+
+    // Extract potential domain from company name for filtering
+    const companyDomain = extractVendorDomain(companyName);
+    
+    const response = await fetch('https://api.perplexity.ai/chat/completions', {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${PERPLEXITY_API_KEY}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        model: 'sonar',
+        messages: [
+          {
+            role: 'system',
+            content: `You are a company research assistant. Find accurate information about "${companyName}".
+
+STRICT SOURCING RULES:
+1. ONLY use information from official sources:
+   - The company's official website${companyDomain ? ` (${companyDomain})` : ''}
+   - Official LinkedIn company page (linkedin.com/company/)
+2. For contact information, use the official "Contact Us" or "About" page
+3. If information cannot be found from official sources, respond with "OFFICIAL_SOURCE_NOT_FOUND"
+4. Always cite the exact URL where you found the information
+5. For dates, use format YYYY or "Month YYYY"
+6. For addresses, provide the full address in one line`
+          },
+          {
+            role: 'user',
+            content: searchQuery
+          }
+        ],
+        temperature: 0.1,
+        top_p: 0.9,
+        max_tokens: 1500,
+        return_images: false,
+        return_related_questions: false,
+        search_domain_filter: companyDomain 
+          ? [companyDomain, 'linkedin.com'] 
+          : ['linkedin.com'],
+      }),
+    });
+
+    if (!response.ok) {
+      console.error(`[Provider] API error for ${fieldName}:`, response.status);
+      return null;
+    }
+
+    const data = await response.json();
+    const content = data.choices?.[0]?.message?.content || '';
+    const citations = data.citations || [];
+    
+    // Check if response indicates no official source found
+    if (content.includes('OFFICIAL_SOURCE_NOT_FOUND')) {
+      console.log(`[Provider] No official source found for ${fieldName}`);
+      // Try a broader search
+      return searchProviderInfoFallback(companyName, fieldName);
+    }
+    
+    // Validate URLs are accessible
+    const validatedUrls = await validateUrls(citations, 3);
+    
+    console.log(`[Provider] Found ${validatedUrls.length} valid URLs for ${fieldName}`);
+
+    return {
+      content: `[COMPANY RESEARCH: ${companyName}]\n\n${content}`,
+      urls: validatedUrls,
+      isOfficialSource: validatedUrls.length > 0
+    };
+  } catch (error) {
+    console.error('[Provider] Error:', error);
+    return null;
+  }
+}
+
+// Fallback search for Provider without domain restriction
+async function searchProviderInfoFallback(companyName: string, fieldName: string): Promise<PerplexitySearchResultWithQuality | null> {
+  try {
+    const searchQuery = buildProviderSearchQuery(companyName, fieldName);
+    console.log(`[Provider Fallback] Broader search for ${fieldName}: ${searchQuery}`);
+
+    const response = await fetch('https://api.perplexity.ai/chat/completions', {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${PERPLEXITY_API_KEY}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        model: 'sonar',
+        messages: [
+          {
+            role: 'system',
+            content: `You are a company research assistant. Find information about "${companyName}".
+Prioritize official sources (company website, LinkedIn) but accept other reputable sources if needed.
+Always cite your sources. If information is not available, say "Not publicly available".`
+          },
+          {
+            role: 'user',
+            content: searchQuery
+          }
+        ],
+        temperature: 0.1,
+        top_p: 0.9,
+        max_tokens: 1500,
+        return_images: false,
+        return_related_questions: false,
+        search_recency_filter: 'year',
+      }),
+    });
+
+    if (!response.ok) {
+      console.error(`[Provider Fallback] API error for ${fieldName}:`, response.status);
+      return null;
+    }
+
+    const data = await response.json();
+    const content = data.choices?.[0]?.message?.content || '';
+    const citations = data.citations || [];
+    
+    const validatedUrls = await validateUrls(citations, 3);
+
+    return {
+      content: `[COMPANY RESEARCH - BROADER SEARCH]\n\n${content}`,
+      urls: validatedUrls,
+      isOfficialSource: false
+    };
+  } catch (error) {
+    console.error('[Provider Fallback] Error:', error);
+    return null;
+  }
+}
+
 serve(async (req) => {
   // Handle CORS preflight requests
   if (req.method === 'OPTIONS') {
@@ -1742,6 +1990,7 @@ serve(async (req) => {
     console.log('Product URL:', productUrl?.substring(0, 100));
 
     const isApplicationWorkflow = workflowType === 'application';
+    const isProviderWorkflow = workflowType === 'provider';
 
     // Extract domain from productUrl if provided (for prioritized search)
     let productUrlDomain: string | null = null;
@@ -1766,7 +2015,9 @@ serve(async (req) => {
       console.log('Name field is empty and no name provided - returning prompt to enter name');
       const nameGuidance = isApplicationWorkflow 
         ? 'Please enter the application name. For example: "Salesforce Sales Cloud" or "Microsoft Teams"'
-        : 'Please enter a component name following the format: [Provider Name] + [Product Name] + [Version]. For example: "Microsoft SQL Server 2022 Standard" or "MongoDB Community Server 8.2"';
+        : isProviderWorkflow 
+          ? 'Please enter the company name. For example: "Microsoft" or "Salesforce"'
+          : 'Please enter a component name following the format: [Provider Name] + [Product Name] + [Version]. For example: "Microsoft SQL Server 2022 Standard" or "MongoDB Community Server 8.2"';
       return new Response(
         JSON.stringify({ 
           recommendations: [{
@@ -1929,6 +2180,29 @@ This is the official product URL provided by the user.`,
             }
           }
         }
+      } else if (isProviderWorkflow) {
+        // PROVIDER WORKFLOW: Search for company information
+        console.log(`[Provider] Starting company research for: ${componentName}`);
+        
+        for (const field of fields) {
+          // Skip fields that were already inferred
+          if (inferredResults[field.fieldId]) {
+            console.log(`[Provider] Skipping ${field.fieldName} - already inferred`);
+            continue;
+          }
+          
+          // Skip the name field (it's the company name provided by user)
+          if (field.fieldName.toLowerCase().includes('company') && field.fieldName.toLowerCase().includes('name')) {
+            console.log(`[Provider] Skipping Company Name field - user provided`);
+            continue;
+          }
+          
+          if (isProviderSearchField(field.fieldName)) {
+            console.log(`[Provider] Searching info for field: ${field.fieldName}`);
+            const result = await searchProviderInfo(componentName, field.fieldName);
+            searchResults[field.fieldId] = result;
+          }
+        }
       } else {
         // ITC WORKFLOW: Original lifecycle-focused search
         // First pass: Search for date fields and cache their URLs
@@ -2044,11 +2318,13 @@ USE THESE SEARCH RESULTS as your primary source. Include the source URL in your 
     }
 
     // Build workflow-specific system prompt
-    const systemPrompt = isApplicationWorkflow 
+    const systemPrompt = isProviderWorkflow
+      ? buildProviderSystemPrompt(componentName, searchContext)
+      : isApplicationWorkflow 
       ? buildApplicationSystemPrompt(componentName, searchContext)
       : buildITCSystemPrompt(componentName, searchContext);
 
-    const entityType = isApplicationWorkflow ? 'Application' : 'IT Component';
+    const entityType = isProviderWorkflow ? 'Provider' : isApplicationWorkflow ? 'Application' : 'IT Component';
     
     // Filter out fields that were inferred - we don't need AI to process them
     const fieldsNeedingAI = fields.filter((f: FieldData) => !inferredResults[f.fieldId]);
