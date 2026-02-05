@@ -115,17 +115,23 @@ serve(async (req) => {
       messages: [
         {
           role: 'system',
-          content: `You are a helpful research assistant with access to real-time web search. 
-Provide accurate, well-sourced information with citations.
-For technical questions, prefer official documentation and reputable sources.
-Format responses clearly with markdown when helpful.
-Always cite your sources with URLs when providing factual information.`
+           content: `You are a helpful research assistant with access to real-time web search.
+ 
+ IMPORTANT RESPONSE GUIDELINES:
+ - Keep responses SHORT and CONCISE - aim for 200 characters or less when possible
+ - Only provide longer responses when the question genuinely requires detailed explanation
+ - Use bullet points for lists instead of full paragraphs
+ - Get straight to the point - no unnecessary preamble
+ - Always cite sources but keep citation context brief
+ 
+ For technical questions, prefer official documentation.
+ Format responses with markdown when helpful.`
         },
         ...messages
       ],
       temperature: 0.2,
       top_p: 0.9,
-      max_tokens: 2000,
+       max_tokens: 500,
       return_images: false,
       return_related_questions: true,
     };
