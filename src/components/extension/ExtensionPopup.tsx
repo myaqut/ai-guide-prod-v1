@@ -232,7 +232,7 @@ export const ExtensionPopup = () => {
         ? { ...state.urlCache, ...result.cachedUrls }
         : state.urlCache;
       
-      const setter = state.workflowType === 'itc' ? setItcState : setApplicationState;
+      const setter = state.workflowType === 'itc' ? setItcState : state.workflowType === 'application' ? setApplicationState : setProviderState;
       setter(prev => prev ? {
         ...prev,
         urlCache: newUrlCache,
@@ -254,7 +254,7 @@ export const ExtensionPopup = () => {
       }
     } catch (error) {
       console.error('Error generating recommendation for field:', field.fieldId, error);
-      const setter = state.workflowType === 'itc' ? setItcState : setApplicationState;
+      const setter = state.workflowType === 'itc' ? setItcState : state.workflowType === 'application' ? setApplicationState : setProviderState;
       setter(prev => prev ? {
         ...prev,
         recommendations: prev.recommendations.map(r => 
