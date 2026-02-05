@@ -27,11 +27,11 @@ export async function generateRecommendations(
   pageContext?: string,
   componentName?: string,
   cachedUrls?: Record<string, string[]>,
-  workflowType: WorkflowType = 'itc',
+  workflowType: WorkflowType = 'itc', 
   productUrl?: string
 ): Promise<GenerateRecommendationsResult> {
   const { data, error } = await supabase.functions.invoke('generate-recommendations', {
-    body: { fields, pageContext, componentName, cachedUrls, workflowType, productUrl },
+    body: { fields, pageContext, componentName, cachedUrls, workflowType: workflowType === 'provider' ? 'provider' : workflowType, productUrl },
   });
 
   if (error) {

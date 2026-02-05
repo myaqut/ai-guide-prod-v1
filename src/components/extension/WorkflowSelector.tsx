@@ -1,7 +1,7 @@
-import { Monitor, Cloud, Sparkles } from "lucide-react";
+import { Monitor, Cloud, Sparkles, Building2 } from "lucide-react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 
-export type WorkflowType = 'itc' | 'application' | 'chat';
+export type WorkflowType = 'itc' | 'application' | 'provider' | 'chat';
 
 interface WorkflowSelectorProps {
   onSelect: (workflow: WorkflowType) => void;
@@ -62,6 +62,30 @@ export const WorkflowSelector = ({ onSelect }: WorkflowSelectorProps) => {
           <CardContent className="pb-4">
             <p className="text-xs text-muted-foreground">
               Vendor info, pricing, integrations, compliance, user access
+            </p>
+          </CardContent>
+        </Card>
+
+        <Card 
+          className="cursor-pointer transition-all hover:border-secondary hover:shadow-md group"
+          onClick={() => onSelect('provider')}
+        >
+          <CardHeader className="pb-2 pt-4">
+            <div className="flex items-center gap-3">
+              <div className="p-2 rounded-lg bg-secondary/10 text-secondary group-hover:bg-secondary group-hover:text-secondary-foreground transition-colors">
+                <Building2 className="h-5 w-5" />
+              </div>
+              <div>
+                <CardTitle className="text-base">Provider</CardTitle>
+                <CardDescription className="text-xs">
+                  Research companies & vendors
+                </CardDescription>
+              </div>
+            </div>
+          </CardHeader>
+          <CardContent className="pb-4">
+            <p className="text-xs text-muted-foreground">
+              Company info, headquarters, contact details, official pages
             </p>
           </CardContent>
         </Card>

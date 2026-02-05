@@ -3,7 +3,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { ArrowRight, Globe, Package, AlertCircle, CheckCircle2 } from "lucide-react";
+import { ArrowRight, Globe, Package, AlertCircle, CheckCircle2, Building2 } from "lucide-react";
 import { WorkflowType } from "./WorkflowSelector";
 import { isValidNameFormat, getNameFormatGuidance } from "@/lib/workflow-config";
 
@@ -20,7 +20,8 @@ export const EntryForm = ({ workflowType, onSubmit, onBack }: EntryFormProps) =>
   const [urlError, setUrlError] = useState<string | null>(null);
 
   const isITC = workflowType === 'itc';
-  const entityLabel = isITC ? 'IT Component' : 'Application';
+  const isProvider = workflowType === 'provider';
+  const entityLabel = isITC ? 'IT Component' : isProvider ? 'Provider' : 'Application';
   
   // Validate name format
   const validateName = (value: string): boolean => {
@@ -100,11 +101,18 @@ export const EntryForm = ({ workflowType, onSubmit, onBack }: EntryFormProps) =>
       <Card>
         <CardHeader className="pb-3">
           <CardTitle className="text-base flex items-center gap-2">
-            <Package className="h-4 w-4 text-primary" />
+            {isProvider ? (
+              <Building2 className="h-4 w-4 text-primary" />
+            ) : (
+              <Package className="h-4 w-4 text-primary" />
+            )}
             {entityLabel} Details
           </CardTitle>
           <CardDescription>
-            Enter the {entityLabel.toLowerCase()} name and optionally a reference URL.
+            {isProvider 
+              ? "Enter the company name to research."
+              : `Enter the ${entityLabel.toLowerCase()} name and optionally a reference URL.`
+            }
           </CardDescription>
         </CardHeader>
         <CardContent>
@@ -118,7 +126,7 @@ export const EntryForm = ({ workflowType, onSubmit, onBack }: EntryFormProps) =>
                 <Input
                   id="name"
                   type="text"
-                  placeholder={isITC ? "e.g., Microsoft SQL Server 2022" : "e.g., Salesforce Sales Cloud"}
+                  placeholder={isITC ? "e.g., Microsoft SQL Server 2022" : isProvider ? "e.g., Microsoft or Salesforce" : "e.g., Salesforce Sales Cloud"}
                   value={name}
                   onChange={(e) => handleNameChange(e.target.value)}
                   className={nameError ? "border-destructive pr-10" : isValid ? "border-green-500 pr-10" : ""}
@@ -134,15 +142,18 @@ export const EntryForm = ({ workflowType, onSubmit, onBack }: EntryFormProps) =>
                 <p className="text-xs text-destructive">{nameError}</p>
               )}
               <p className="text-xs text-muted-foreground">
-                {isITC 
+                {isProvider
+                  ? "Enter the company name. Example: Microsoft, Salesforce, Oracle"
+                  : isITC 
                   ? "Format: [Company] + [Product Name] + [Version]. Example: Microsoft SQL Server 2022"
                   : "Format: [Company] + [Product Name]. Example: Salesforce Sales Cloud"
                 }
               </p>
             </div>
 
-            {/* URL Field - Optional */}
-            <div className="space-y-2">
+            {/* URL Field - Optional (not shown for Provider workflow) */}
+            {!isProvider && (
+              <div className="space-y-2">
               <Label htmlFor="url" className="flex items-center gap-2">
                 <Globe className="h-3.5 w-3.5" />
                 Product URL <span className="text-muted-foreground text-xs">(optional)</span>
@@ -162,6 +173,7 @@ export const EntryForm = ({ workflowType, onSubmit, onBack }: EntryFormProps) =>
                 Providing the official product URL helps improve search accuracy.
               </p>
             </div>
+            )}
 
             {/* Submit Button */}
             <Button 
@@ -169,7 +181,7 @@ export const EntryForm = ({ workflowType, onSubmit, onBack }: EntryFormProps) =>
               className="w-full" 
               disabled={!isValid}
             >
-              Start Cataloging
+              {isProvider ? 'Start Research' : 'Start Cataloging'}
               <ArrowRight className="ml-2 h-4 w-4" />
             </Button>
           </form>
@@ -181,8 +193,17 @@ export const EntryForm = ({ workflowType, onSubmit, onBack }: EntryFormProps) =>
         <CardContent className="pt-4">
           <h4 className="text-sm font-medium mb-2">💡 Tips</h4>
           <ul className="text-xs text-muted-foreground space-y-1">
-            <li>• The name will be used to search for all field recommendations</li>
-            <li>• Adding a URL helps the AI find accurate lifecycle dates and documentation</li>
+            {isProvider ? (
+              <>
+                <li>• The company name will be used to search for official information</li>
+                <li>• Results are sourced from official company website and LinkedIn</li>
+              </>
+            ) : (
+              <>
+                <li>• The name will be used to search for all field recommendations</li>
+                <li>• Adding a URL helps the AI find accurate lifecycle dates and documentation</li>
+              </>
+            )}
             {isITC && <li>• Include the version number for accurate lifecycle information</li>}
           </ul>
         </CardContent>

@@ -10,6 +10,7 @@ import { generateRecommendations, FieldData, GenerateRecommendationsResult } fro
 import { isValidNameFormat, getPageContext, getNameFormatGuidance, getWorkflowLabel } from "@/lib/workflow-config";
 import { toast } from "sonner";
 import { Monitor, Cloud, Sparkles, X, Plus, Loader2 } from "lucide-react";
+import { Building2 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useAuth } from "@/hooks/useAuth";
 
@@ -28,9 +29,9 @@ const MOCK_FIELDS: FieldData[] = [
   },
 ];
 
-// State interface for catalog workflows (ITC/Application)
+// State interface for catalog workflows (ITC/Application/Provider)
 interface CatalogWorkflowState {
-  workflowType: 'itc' | 'application';
+  workflowType: 'itc' | 'application' | 'provider';
   showEntryForm: boolean;
   recommendations: FieldRecommendation[];
   isAnalyzing: boolean;
@@ -49,14 +50,15 @@ export const ExtensionPopup = () => {
   const authLoading = false;
   
   // Active tab for switching between workflows
-  const [activeTab, setActiveTab] = useState<'workflow' | 'itc' | 'application' | 'chat'>('workflow');
+  const [activeTab, setActiveTab] = useState<'workflow' | 'itc' | 'application' | 'provider' | 'chat'>('workflow');
   
   // Current catalog workflow being set up (null means not selected yet)
-  const [pendingCatalogWorkflow, setPendingCatalogWorkflow] = useState<'itc' | 'application' | null>(null);
+  const [pendingCatalogWorkflow, setPendingCatalogWorkflow] = useState<'itc' | 'application' | 'provider' | null>(null);
   
-  // Separate persisted states for ITC and Application workflows
+  // Separate persisted states for ITC, Application, and Provider workflows
   const [itcState, setItcState] = useState<CatalogWorkflowState | null>(null);
   const [applicationState, setApplicationState] = useState<CatalogWorkflowState | null>(null);
+  const [providerState, setProviderState] = useState<CatalogWorkflowState | null>(null);
   
   // Chat tab visibility (can be closed and reopened)
   const [showChatTab, setShowChatTab] = useState(false);
@@ -74,15 +76,18 @@ export const ExtensionPopup = () => {
   const getActiveCatalogState = (): CatalogWorkflowState | null => {
     if (activeTab === 'itc') return itcState;
     if (activeTab === 'application') return applicationState;
+    if (activeTab === 'provider') return providerState;
     return null;
   };
 
   // Set the active catalog state based on workflow type
-  const setActiveCatalogState = (workflowType: 'itc' | 'application', state: CatalogWorkflowState | null) => {
+  const setActiveCatalogState = (workflowType: 'itc' | 'application' | 'provider', state: CatalogWorkflowState | null) => {
     if (workflowType === 'itc') {
       setItcState(state);
-    } else {
+    } else if (workflowType === 'application') {
       setApplicationState(state);
+    } else {
+      setProviderState(state);
     }
   };
 
@@ -100,14 +105,16 @@ export const ExtensionPopup = () => {
   const urlCache = catalogState?.urlCache ?? {};
 
   // Update catalog state helper - updates the correct state based on workflow type
-  const updateCatalogState = (updates: Partial<CatalogWorkflowState>, targetWorkflow?: 'itc' | 'application') => {
-    const workflow = targetWorkflow ?? (activeTab === 'itc' ? 'itc' : activeTab === 'application' ? 'application' : null);
+  const updateCatalogState = (updates: Partial<CatalogWorkflowState>, targetWorkflow?: 'itc' | 'application' | 'provider') => {
+    const workflow = targetWorkflow ?? (activeTab === 'itc' ? 'itc' : activeTab === 'application' ? 'application' : activeTab === 'provider' ? 'provider' : null);
     if (!workflow) return;
     
     if (workflow === 'itc') {
       setItcState(prev => prev ? { ...prev, ...updates } : null);
-    } else {
+    } else if (workflow === 'application') {
       setApplicationState(prev => prev ? { ...prev, ...updates } : null);
+    } else {
+      setProviderState(prev => prev ? { ...prev, ...updates } : null);
     }
   };
 
@@ -120,7 +127,7 @@ export const ExtensionPopup = () => {
       toast.success('Research Chat ready');
     } else {
       // Check if this workflow type already has an active session
-      const existingState = workflow === 'itc' ? itcState : applicationState;
+      const existingState = workflow === 'itc' ? itcState : workflow === 'application' ? applicationState : providerState;
       if (existingState) {
         // Just switch to the existing tab
         setActiveTab(workflow);
@@ -168,7 +175,7 @@ export const ExtensionPopup = () => {
     // Clear pending workflow since it's now saved
     setPendingCatalogWorkflow(null);
     
-    const entityLabel = workflow === 'application' ? 'Application' : 'Component';
+    const entityLabel = workflow === 'application' ? 'Application' : workflow === 'provider' ? 'Provider' : 'Component';
     toast.success(`${entityLabel} identified: ${name}`);
   };
 
@@ -179,9 +186,9 @@ export const ExtensionPopup = () => {
   };
 
   // Generate recommendation for a single field
-  const generateSingleFieldRecommendation = useCallback(async (field: FieldData, targetWorkflow?: 'itc' | 'application') => {
+  const generateSingleFieldRecommendation = useCallback(async (field: FieldData, targetWorkflow?: 'itc' | 'application' | 'provider') => {
     const state = targetWorkflow 
-      ? (targetWorkflow === 'itc' ? itcState : applicationState)
+      ? (targetWorkflow === 'itc' ? itcState : targetWorkflow === 'application' ? applicationState : providerState)
       : catalogState;
     if (!state) return;
     
@@ -248,7 +255,7 @@ export const ExtensionPopup = () => {
     
     const isNameField = field.fieldName?.toLowerCase() === 'name';
     const workflow = catalogState.workflowType;
-    const setter = workflow === 'itc' ? setItcState : setApplicationState;
+    const setter = workflow === 'itc' ? setItcState : workflow === 'application' ? setApplicationState : setProviderState;
     
     setter(prev => {
       if (!prev) return null;
@@ -360,7 +367,7 @@ export const ExtensionPopup = () => {
         };
       });
 
-      const setter = workflow === 'itc' ? setItcState : setApplicationState;
+      const setter = workflow === 'itc' ? setItcState : workflow === 'application' ? setApplicationState : setProviderState;
       setter(prev => prev ? {
         ...prev,
         isAnalyzing: false,
@@ -383,7 +390,7 @@ export const ExtensionPopup = () => {
     if (!catalogState) return;
     
     const workflow = catalogState.workflowType;
-    const setter = workflow === 'itc' ? setItcState : setApplicationState;
+    const setter = workflow === 'itc' ? setItcState : workflow === 'application' ? setApplicationState : setProviderState;
     
     const field = catalogState.recommendations.find(r => r.fieldId === fieldId);
     if (field?.fieldName?.toLowerCase() === 'name' && value) {
@@ -392,7 +399,7 @@ export const ExtensionPopup = () => {
           approvedComponentName: value,
           nameFieldStatus: 'valid'
         }, workflow);
-        toast.success(`${catalogState.workflowType === 'application' ? 'Application' : 'Component'} name approved: ${value}`);
+        toast.success(`${catalogState.workflowType === 'application' ? 'Application' : catalogState.workflowType === 'provider' ? 'Provider' : 'Component'} name approved: ${value}`);
       } else {
         updateCatalogState({ nameFieldStatus: 'invalid' }, workflow);
         const guidance = getNameFormatGuidance(catalogState.workflowType);
@@ -470,36 +477,48 @@ export const ExtensionPopup = () => {
   };
 
   // Close a specific workflow tab
-  const handleCloseWorkflow = (workflow: 'itc' | 'application') => {
+  const handleCloseWorkflow = (workflow: 'itc' | 'application' | 'provider') => {
     if (workflow === 'itc') {
       setItcState(null);
-    } else {
+    } else if (workflow === 'application') {
       setApplicationState(null);
+    } else {
+      setProviderState(null);
     }
     
     // If we're closing the active tab, switch to another tab
     if (activeTab === workflow) {
       if (workflow === 'itc' && applicationState) {
         setActiveTab('application');
+      } else if (workflow === 'itc' && providerState) {
+        setActiveTab('provider');
       } else if (workflow === 'application' && itcState) {
         setActiveTab('itc');
+      } else if (workflow === 'application' && providerState) {
+        setActiveTab('provider');
+      } else if (workflow === 'provider' && itcState) {
+        setActiveTab('itc');
+      } else if (workflow === 'provider' && applicationState) {
+        setActiveTab('application');
       } else {
         setActiveTab('chat');
       }
     }
     
-    toast.success(`${workflow === 'itc' ? 'IT Component' : 'Application'} workflow closed`);
+    toast.success(`${workflow === 'itc' ? 'IT Component' : workflow === 'application' ? 'Application' : 'Provider'} workflow closed`);
   };
 
   const handleBackFromEntry = () => {
     setPendingCatalogWorkflow(null);
     // Go back to workflow selector if no active sessions
-    if (!itcState && !applicationState) {
+    if (!itcState && !applicationState && !providerState) {
       setActiveTab('workflow');
     } else if (itcState) {
       setActiveTab('itc');
     } else if (applicationState) {
       setActiveTab('application');
+    } else if (providerState) {
+      setActiveTab('provider');
     } else {
       setActiveTab('chat');
     }
@@ -508,7 +527,8 @@ export const ExtensionPopup = () => {
   // Determine if we have any active catalog sessions
   const hasItcSession = itcState !== null;
   const hasApplicationSession = applicationState !== null;
-  const hasAnyCatalogSession = hasItcSession || hasApplicationSession;
+  const hasProviderSession = providerState !== null;
+  const hasAnyCatalogSession = hasItcSession || hasApplicationSession || hasProviderSession;
   
   // Show tabs when we have at least one active workflow, pending workflow, or chat is open
   const showBottomTabs = hasAnyCatalogSession || pendingCatalogWorkflow !== null || showChatTab;
@@ -521,6 +541,8 @@ export const ExtensionPopup = () => {
       setActiveTab('itc');
     } else if (hasApplicationSession) {
       setActiveTab('application');
+    } else if (hasProviderSession) {
+      setActiveTab('provider');
     } else {
       setActiveTab('workflow');
     }
@@ -528,8 +550,8 @@ export const ExtensionPopup = () => {
   };
 
   // Render catalog workflow content for a specific tab type
-  const renderCatalogContent = (tabType: 'itc' | 'application') => {
-    const state = tabType === 'itc' ? itcState : applicationState;
+  const renderCatalogContent = (tabType: 'itc' | 'application' | 'provider') => {
+    const state = tabType === 'itc' ? itcState : tabType === 'application' ? applicationState : providerState;
     
     // If we're setting up a new catalog workflow
     if (pendingCatalogWorkflow === tabType && !state) {
@@ -579,7 +601,7 @@ export const ExtensionPopup = () => {
   };
 
   // Check if we can open a new workflow (both aren't already open)
-  const canOpenNewWorkflow = !hasItcSession || !hasApplicationSession;
+  const canOpenNewWorkflow = !hasItcSession || !hasApplicationSession || !hasProviderSession;
 
   // Chrome-style tab component
   const ChromeTab = ({ 
@@ -703,9 +725,27 @@ export const ExtensionPopup = () => {
               onClose={() => {
                 if (pendingCatalogWorkflow === 'application') {
                   setPendingCatalogWorkflow(null);
-                  setActiveTab(hasItcSession ? 'itc' : 'chat');
+                  setActiveTab(hasItcSession ? 'itc' : hasProviderSession ? 'provider' : 'chat');
                 } else {
                   handleCloseWorkflow('application');
+                }
+              }}
+            />
+          )}
+          
+          {/* Provider Tab */}
+          {(hasProviderSession || pendingCatalogWorkflow === 'provider') && (
+            <ChromeTab
+              active={activeTab === 'provider'}
+              icon={<Building2 className="h-4 w-4" />}
+              label="Provider"
+              onClick={() => setActiveTab('provider')}
+              onClose={() => {
+                if (pendingCatalogWorkflow === 'provider') {
+                  setPendingCatalogWorkflow(null);
+                  setActiveTab(hasItcSession ? 'itc' : hasApplicationSession ? 'application' : 'chat');
+                } else {
+                  handleCloseWorkflow('provider');
                 }
               }}
             />
@@ -758,6 +798,16 @@ export const ExtensionPopup = () => {
           </div>
         )}
         
+        {/* Provider Tab - always rendered when session exists, visibility controlled by CSS */}
+        {(hasProviderSession || pendingCatalogWorkflow === 'provider') && (
+          <div className={cn(
+            "absolute inset-0 flex flex-col bg-background overflow-hidden",
+            activeTab === 'provider' ? "z-10 visible" : "z-0 invisible pointer-events-none"
+          )}>
+            {renderCatalogContent('provider')}
+          </div>
+        )}
+        
         {/* Research Chat - always rendered when showChatTab is true, visibility controlled by CSS */}
         {showChatTab && (
           <div className={cn(
@@ -766,7 +816,7 @@ export const ExtensionPopup = () => {
           )}>
             <PerplexityChat 
               embedded={showBottomTabs}
-              onBack={!showBottomTabs ? () => setActiveTab(hasAnyCatalogSession ? (hasItcSession ? 'itc' : 'application') : 'workflow') : undefined}
+              onBack={!showBottomTabs ? () => setActiveTab(hasAnyCatalogSession ? (hasItcSession ? 'itc' : hasApplicationSession ? 'application' : 'provider') : 'workflow') : undefined}
               messages={chatMessages}
               onMessagesChange={setChatMessages}
               input={chatInput}
