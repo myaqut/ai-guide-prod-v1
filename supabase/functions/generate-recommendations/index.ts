@@ -1765,7 +1765,7 @@ function isProviderSearchField(fieldName: string): boolean {
   return searchableFields.some(keyword => lowerName.includes(keyword));
 }
 
-// Search for Provider company info
+// Search for Provider company info - OPTIMIZED: Single search, no fallback to avoid waterfall
 async function searchProviderInfo(companyName: string, fieldName: string): Promise<PerplexitySearchResultWithQuality | null> {
   if (!PERPLEXITY_API_KEY) {
     console.log('Perplexity API key not configured, skipping web search');
@@ -1779,6 +1779,8 @@ async function searchProviderInfo(companyName: string, fieldName: string): Promi
     // Extract potential domain from company name for filtering
     const companyDomain = extractVendorDomain(companyName);
     
+    // OPTIMIZATION: Single comprehensive search instead of official-then-fallback waterfall
+    // This cuts API calls in half for Provider workflow
     const response = await fetch('https://api.perplexity.ai/chat/completions', {
       method: 'POST',
       headers: {
@@ -1792,15 +1794,17 @@ async function searchProviderInfo(companyName: string, fieldName: string): Promi
             role: 'system',
             content: `You are a company research assistant. Find accurate information about "${companyName}".
 
-STRICT SOURCING RULES:
-1. ONLY use information from official sources:
-   - The company's official website${companyDomain ? ` (${companyDomain})` : ''}
-   - Official LinkedIn company page (linkedin.com/company/)
-2. For contact information, use the official "Contact Us" or "About" page
-3. If information cannot be found from official sources, respond with "OFFICIAL_SOURCE_NOT_FOUND"
-4. Always cite the exact URL where you found the information
-5. For dates, use format YYYY or "Month YYYY"
-6. For addresses, provide the full address in one line`
+SOURCING PRIORITY (in order):
+1. Company's official website${companyDomain ? ` (${companyDomain})` : ''}
+2. Official LinkedIn company page (linkedin.com/company/)
+3. Reputable business sources (Wikipedia, Crunchbase, Bloomberg) if official sources unavailable
+
+RULES:
+- Always cite the exact URL where you found the information
+- For dates, use format YYYY or "Month YYYY"
+- For addresses, provide the full address in one line
+- If information is not available, say "Not publicly available"
+- Be concise and direct with your answer`
           },
           {
             role: 'user',
@@ -1809,12 +1813,11 @@ STRICT SOURCING RULES:
         ],
         temperature: 0.1,
         top_p: 0.9,
-        max_tokens: 1500,
+        max_tokens: 800, // Reduced for speed - provider fields don't need long responses
         return_images: false,
         return_related_questions: false,
-        search_domain_filter: companyDomain 
-          ? [companyDomain, 'linkedin.com'] 
-          : ['linkedin.com'],
+        // Don't filter by domain - let Perplexity find the best sources
+        // This avoids the fallback search entirely
       }),
     });
 
@@ -1827,22 +1830,37 @@ STRICT SOURCING RULES:
     const content = data.choices?.[0]?.message?.content || '';
     const citations = data.citations || [];
     
-    // Check if response indicates no official source found
-    if (content.includes('OFFICIAL_SOURCE_NOT_FOUND')) {
-      console.log(`[Provider] No official source found for ${fieldName}`);
-      // Try a broader search
-      return searchProviderInfoFallback(companyName, fieldName);
-    }
+    // OPTIMIZATION: Skip URL validation for non-URL fields (description, dates, etc.)
+    // Only validate URLs for fields that actually return URLs
+    const lowerFieldName = fieldName.toLowerCase();
+    const isUrlField = lowerFieldName.includes('url') || 
+                       lowerFieldName.includes('homepage') || 
+                       lowerFieldName.includes('page') ||
+                       lowerFieldName.includes('website');
     
-    // Validate URLs are accessible
-    const validatedUrls = await validateUrls(citations, 3);
+    // For URL fields, validate the first 2 URLs only (speed optimization)
+    // For non-URL fields, skip validation entirely
+    const urls = isUrlField && citations.length > 0 
+      ? await validateUrls(citations.slice(0, 2), 2) 
+      : citations.slice(0, 3);
     
-    console.log(`[Provider] Found ${validatedUrls.length} valid URLs for ${fieldName}`);
+    console.log(`[Provider] Found ${urls.length} URLs for ${fieldName} (validated: ${isUrlField})`);
+
+    // Check if it's from an official source
+    const isOfficial = citations.some((url: string) => {
+      if (!companyDomain) return false;
+      try {
+        const urlObj = new URL(url);
+        return urlObj.hostname.includes(companyDomain.replace('www.', ''));
+      } catch {
+        return false;
+      }
+    });
 
     return {
       content: `[COMPANY RESEARCH: ${companyName}]\n\n${content}`,
-      urls: validatedUrls,
-      isOfficialSource: validatedUrls.length > 0
+      urls,
+      isOfficialSource: isOfficial
     };
   } catch (error) {
     console.error('[Provider] Error:', error);
@@ -1850,61 +1868,11 @@ STRICT SOURCING RULES:
   }
 }
 
-// Fallback search for Provider without domain restriction
-async function searchProviderInfoFallback(companyName: string, fieldName: string): Promise<PerplexitySearchResultWithQuality | null> {
-  try {
-    const searchQuery = buildProviderSearchQuery(companyName, fieldName);
-    console.log(`[Provider Fallback] Broader search for ${fieldName}: ${searchQuery}`);
-
-    const response = await fetch('https://api.perplexity.ai/chat/completions', {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${PERPLEXITY_API_KEY}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        model: 'sonar',
-        messages: [
-          {
-            role: 'system',
-            content: `You are a company research assistant. Find information about "${companyName}".
-Prioritize official sources (company website, LinkedIn) but accept other reputable sources if needed.
-Always cite your sources. If information is not available, say "Not publicly available".`
-          },
-          {
-            role: 'user',
-            content: searchQuery
-          }
-        ],
-        temperature: 0.1,
-        top_p: 0.9,
-        max_tokens: 1500,
-        return_images: false,
-        return_related_questions: false,
-        search_recency_filter: 'year',
-      }),
-    });
-
-    if (!response.ok) {
-      console.error(`[Provider Fallback] API error for ${fieldName}:`, response.status);
-      return null;
-    }
-
-    const data = await response.json();
-    const content = data.choices?.[0]?.message?.content || '';
-    const citations = data.citations || [];
-    
-    const validatedUrls = await validateUrls(citations, 3);
-
-    return {
-      content: `[COMPANY RESEARCH - BROADER SEARCH]\n\n${content}`,
-      urls: validatedUrls,
-      isOfficialSource: false
-    };
-  } catch (error) {
-    console.error('[Provider Fallback] Error:', error);
-    return null;
-  }
+// DEPRECATED: Fallback is no longer used - searchProviderInfo now does comprehensive single search
+// Keeping stub for backwards compatibility
+async function searchProviderInfoFallback(_companyName: string, _fieldName: string): Promise<PerplexitySearchResultWithQuality | null> {
+  console.log('[Provider Fallback] DEPRECATED - should not be called');
+  return null;
 }
 
 serve(async (req) => {
@@ -2177,8 +2145,8 @@ This is the official product URL provided by the user.`,
           }
         }
         
-        // Execute all searches in parallel (max 5 concurrent)
-        const PARALLEL_LIMIT = 5;
+        // Execute ALL searches in parallel (increased limit since we removed fallback waterfall)
+        const PARALLEL_LIMIT = 12; // All provider fields can run at once now
         console.log(`[Provider] Searching ${fieldsToSearch.length} fields in parallel (limit: ${PARALLEL_LIMIT})`);
         
         for (let i = 0; i < fieldsToSearch.length; i += PARALLEL_LIMIT) {
