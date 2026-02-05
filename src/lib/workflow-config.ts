@@ -28,7 +28,7 @@ export const ITC_FIELDS: FieldConfig[] = [
 export const APPLICATION_FIELDS: FieldConfig[] = [
   { fieldId: 'name', fieldName: 'Name', priority: 1, description: 'Application name' },
   { fieldId: 'description', fieldName: 'Description', priority: 2, description: 'What the application does' },
-  { fieldId: 'sid', fieldName: 'SID', priority: 3, description: 'Product name without spaces' },
+  { fieldId: 'siId', fieldName: 'SI ID', priority: 3, description: 'Product name without spaces' },
   { fieldId: 'webpageUrl', fieldName: 'Webpage URL', priority: 4, description: 'Official product website' },
   { fieldId: 'productCategory', fieldName: 'Product Category', priority: 5, description: 'G2 category, or similar product category if not listed' },
   { fieldId: 'pricingType', fieldName: 'Pricing Type', priority: 6, description: 'Pricing policy summary (max 200 chars)' },
