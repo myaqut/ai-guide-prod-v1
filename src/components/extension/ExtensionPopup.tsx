@@ -8,6 +8,7 @@ import { PerplexityChat, ChatMessage } from "./PerplexityChat";
 import { AuthScreen } from "./AuthScreen";
 import { generateRecommendations, FieldData, GenerateRecommendationsResult } from "@/lib/api";
 import { isValidNameFormat, getPageContext, getNameFormatGuidance, getWorkflowLabel } from "@/lib/workflow-config";
+ import { getFieldsForWorkflow } from "@/lib/workflow-config";
 import { toast } from "sonner";
 import { Monitor, Cloud, Sparkles, X, Plus, Loader2 } from "lucide-react";
 import { Building2 } from "lucide-react";
@@ -145,22 +146,37 @@ export const ExtensionPopup = () => {
   const handleEntrySubmit = (name: string, url?: string) => {
     const workflow = pendingCatalogWorkflow!;
     
-    // Initialize the name field
-    const nameField: FieldRecommendation = {
-      fieldId: 'name',
-      fieldName: 'Name',
-      currentValue: name,
-      recommendation: name,
-      confidence: 1,
-      reasoning: 'Name provided by user at start of cataloging process',
-      isLoading: false
-    };
+     // Get all fields for the workflow and create field entries
+     const workflowFields = getFieldsForWorkflow(workflow);
+     const allFields: FieldRecommendation[] = workflowFields.map(field => {
+       if (field.fieldId === 'name') {
+         // Name field is pre-filled by user
+         return {
+           fieldId: 'name',
+           fieldName: field.fieldName,
+           currentValue: name,
+           recommendation: name,
+           confidence: 1,
+           reasoning: 'Name provided by user at start of cataloging process',
+           isLoading: false
+         };
+       }
+       return {
+         fieldId: field.fieldId,
+         fieldName: field.fieldName,
+         currentValue: undefined,
+         recommendation: undefined,
+         confidence: undefined,
+         reasoning: undefined,
+         isLoading: false
+       };
+     });
     
     // Create full catalog state for the specific workflow
     const newState: CatalogWorkflowState = {
       workflowType: workflow,
       showEntryForm: false,
-      recommendations: [nameField],
+       recommendations: allFields,
       isAnalyzing: false,
       pageContext: getPageContext(workflow),
       activeFieldId: null,
@@ -454,7 +470,7 @@ export const ExtensionPopup = () => {
   const handleEditValue = (fieldId: string, value: string) => {
     if (!catalogState) return;
     const workflow = catalogState.workflowType;
-    const setter = workflow === 'itc' ? setItcState : setApplicationState;
+     const setter = workflow === 'itc' ? setItcState : workflow === 'application' ? setApplicationState : setProviderState;
     
     setter(prev => prev ? {
       ...prev,
@@ -467,7 +483,7 @@ export const ExtensionPopup = () => {
   const handleRemoveField = (fieldId: string) => {
     if (!catalogState) return;
     const workflow = catalogState.workflowType;
-    const setter = workflow === 'itc' ? setItcState : setApplicationState;
+     const setter = workflow === 'itc' ? setItcState : workflow === 'application' ? setApplicationState : setProviderState;
     
     setter(prev => prev ? {
       ...prev,
