@@ -54,9 +54,9 @@ export const PROVIDER_FIELDS: FieldConfig[] = [
   { fieldId: 'supportPage', fieldName: 'Support Page', priority: 7, description: 'Customer support or help center URL' },
   { fieldId: 'contactPage', fieldName: 'Contact Us Page', priority: 8, description: 'Contact page URL' },
   { fieldId: 'headquartersAddress', fieldName: 'Headquarters Address', priority: 9, description: 'Full address in one line' },
-  { fieldId: 'headquartersCity', fieldName: 'Headquarters City', priority: 10, description: 'City where headquarters is located' },
-  { fieldId: 'headquartersCountry', fieldName: 'Headquarters Country', priority: 11, description: 'Country where headquarters is located' },
-  { fieldId: 'phoneNumber', fieldName: 'Phone Number', priority: 12, description: 'Main company phone number' },
+  { fieldId: 'headquartersCity', fieldName: 'City', priority: 10, description: 'City where headquarters is located' },
+  { fieldId: 'headquartersCountry', fieldName: 'Country', priority: 11, description: 'Country where headquarters is located' },
+  { fieldId: 'phoneNumber', fieldName: 'Phone', priority: 12, description: 'Main company phone number' },
 ];
 
 export function getFieldsForWorkflow(workflow: WorkflowType): FieldConfig[] {
