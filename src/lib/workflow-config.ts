@@ -24,23 +24,18 @@ export const ITC_FIELDS: FieldConfig[] = [
   { fieldId: 'componentWebsite', fieldName: 'Component Website', priority: 11, description: 'Official product homepage' },
 ];
 
-// Application (SaaS) fields - new implementation
+// Application (SaaS) fields - simplified 10-field implementation
 export const APPLICATION_FIELDS: FieldConfig[] = [
   { fieldId: 'name', fieldName: 'Name', priority: 1, description: 'Application name' },
   { fieldId: 'description', fieldName: 'Description', priority: 2, description: 'What the application does' },
-  { fieldId: 'provider', fieldName: 'Provider', priority: 3, description: 'Vendor/Company name' },
-  { fieldId: 'businessCapability', fieldName: 'Business Capability', priority: 4, description: 'Main business function supported' },
-  { fieldId: 'functionalFit', fieldName: 'Functional Fit', priority: 5, description: 'How well it fits business needs' },
-  { fieldId: 'technicalFit', fieldName: 'Technical Fit', priority: 6, description: 'Technical suitability assessment' },
-  { fieldId: 'lifecyclePhase', fieldName: 'Lifecycle Phase', priority: 7, description: 'Current phase (Plan, Active, Phase Out, End of Life)' },
-  { fieldId: 'hostingType', fieldName: 'Hosting Type', priority: 8, description: 'SaaS, On-Premise, Hybrid, PaaS' },
-  { fieldId: 'dataClassification', fieldName: 'Data Classification', priority: 9, description: 'Data sensitivity level' },
-  { fieldId: 'integrations', fieldName: 'Key Integrations', priority: 10, description: 'Main integrations/connections' },
-  { fieldId: 'website', fieldName: 'Application Website', priority: 11, description: 'Official vendor/product URL' },
-  { fieldId: 'g2Category', fieldName: 'G2 Category', priority: 12, description: 'Software category on G2.com' },
-  { fieldId: 'g2Url', fieldName: 'G2 URL', priority: 13, description: 'Link to G2.com product or category page' },
-  { fieldId: 'gdprCompliant', fieldName: 'GDPR Compliant', priority: 14, description: 'GDPR compliance status' },
-  { fieldId: 'ssoEnabled', fieldName: 'SSO Enabled', priority: 15, description: 'Single Sign-On support' },
+  { fieldId: 'sid', fieldName: 'SID', priority: 3, description: 'Product name without spaces' },
+  { fieldId: 'webpageUrl', fieldName: 'Webpage URL', priority: 4, description: 'Official product website' },
+  { fieldId: 'productCategory', fieldName: 'Product Category', priority: 5, description: 'G2 category, or similar product category if not listed' },
+  { fieldId: 'pricingType', fieldName: 'Pricing Type', priority: 6, description: 'Pricing policy summary (max 200 chars)' },
+  { fieldId: 'pricingUrl', fieldName: 'Pricing URL', priority: 7, description: 'Official pricing page URL' },
+  { fieldId: 'hostingDescription', fieldName: 'Hosting Description', priority: 8, description: 'Hosting servers (e.g., AWS, Azure, GCP)' },
+  { fieldId: 'ssoStatus', fieldName: 'SSO Status', priority: 9, description: 'Whether product supports SSO' },
+  { fieldId: 'internalComment', fieldName: 'Internal Comment', priority: 10, description: 'G2 category page URL' },
 ];
 
 // Provider (Company Research) fields - new implementation
