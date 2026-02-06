@@ -497,18 +497,33 @@ export const ExtensionPopup = () => {
       }
     }
     
-    if (isExtension) {
+    // Helper to apply value via content script
+    const applyViaContentScript = async (): Promise<boolean> => {
+      if (!isExtension) return false;
+      
       try {
         const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
         
-        if (tab?.id) {
+        if (!tab?.id) {
+          console.warn('No active tab found');
+          return false;
+        }
+        
+        // Check if we're on a LeanIX page
+        if (!tab.url?.includes('leanix.net')) {
+          toast.info(`Value copied! Navigate to LeanIX to apply: ${value}`);
+          await navigator.clipboard.writeText(value);
+          return true;
+        }
+        
+        return new Promise((resolve) => {
           chrome.tabs.sendMessage(
-            tab.id, 
+            tab.id!, 
             { action: 'applyRecommendation', fieldId, value },
             (response: any) => {
               if (chrome.runtime.lastError) {
-                console.error('Error applying value:', chrome.runtime.lastError);
-                toast.error(`Failed to apply: ${chrome.runtime.lastError.message}`);
+                console.warn('Content script not available:', chrome.runtime.lastError.message);
+                resolve(false);
                 return;
               }
               
@@ -520,24 +535,39 @@ export const ExtensionPopup = () => {
                     r.fieldId === fieldId ? { ...r, currentValue: value } : r
                   )
                 } : null);
+                resolve(true);
               } else {
-                toast.error(`Failed to apply: ${response?.error || 'Unknown error'}`);
+                console.warn('Apply failed:', response?.error);
+                resolve(false);
               }
             }
           );
-        }
+        });
       } catch (error) {
-        console.error('Error applying recommendation:', error);
-        toast.error("Failed to apply recommendation");
+        console.warn('Error communicating with content script:', error);
+        return false;
       }
-    } else {
-      toast.success(`Applied recommendation to ${fieldId}`);
+    };
+    
+    // Try to apply via content script first (if extension context)
+    const appliedViaContentScript = await applyViaContentScript();
+    
+    if (!appliedViaContentScript) {
+      // Fallback: Update local state and copy to clipboard
       setter(prev => prev ? {
         ...prev,
         recommendations: prev.recommendations.map(r =>
           r.fieldId === fieldId ? { ...r, currentValue: value } : r
         )
       } : null);
+      
+      // Copy value to clipboard for manual paste
+      try {
+        await navigator.clipboard.writeText(value);
+        toast.success(`Copied "${value}" to clipboard - paste in LeanIX field`);
+      } catch {
+        toast.success(`Recommendation saved: ${value}`);
+      }
     }
   };
 
