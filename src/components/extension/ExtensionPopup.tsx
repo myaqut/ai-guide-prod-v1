@@ -161,6 +161,7 @@ export const ExtensionPopup = () => {
            isLoading: false
          };
        }
+       // Set other fields to loading state - we'll auto-generate
        return {
          fieldId: field.fieldId,
          fieldName: field.fieldName,
@@ -168,7 +169,7 @@ export const ExtensionPopup = () => {
          recommendation: undefined,
          confidence: undefined,
          reasoning: undefined,
-         isLoading: false
+         isLoading: true // Start in loading state for auto-generation
        };
      });
     
@@ -176,8 +177,8 @@ export const ExtensionPopup = () => {
     const newState: CatalogWorkflowState = {
       workflowType: workflow,
       showEntryForm: false,
-       recommendations: allFields,
-      isAnalyzing: false,
+      recommendations: allFields,
+      isAnalyzing: true, // Start analyzing immediately
       pageContext: getPageContext(workflow),
       activeFieldId: null,
       approvedComponentName: name,
@@ -192,7 +193,80 @@ export const ExtensionPopup = () => {
     setPendingCatalogWorkflow(null);
     
     const entityLabel = workflow === 'application' ? 'Application' : workflow === 'provider' ? 'Provider' : 'Component';
-    toast.success(`${entityLabel} identified: ${name}`);
+    toast.success(`${entityLabel} identified: ${name}. Generating recommendations...`);
+    
+    // Auto-trigger recommendation generation
+    setTimeout(() => {
+      triggerAutoGenerate(workflow, allFields, name, url);
+    }, 100);
+  };
+  
+  // Auto-generate recommendations after entry form submission
+  const triggerAutoGenerate = async (
+    workflow: 'itc' | 'application' | 'provider',
+    fields: FieldRecommendation[],
+    componentName: string,
+    productUrlParam?: string
+  ) => {
+    const setter = workflow === 'itc' ? setItcState : workflow === 'application' ? setApplicationState : setProviderState;
+    const context = getPageContext(workflow);
+    
+    try {
+      const fieldsToAnalyze = fields
+        .filter(f => f.fieldId !== 'name') // Skip name field, already filled
+        .map(r => ({
+          fieldId: r.fieldId,
+          fieldName: r.fieldName,
+          currentValue: r.currentValue,
+        }));
+
+      const result = await generateRecommendations(
+        fieldsToAnalyze, 
+        context, 
+        componentName, 
+        {}, // Empty URL cache for first run
+        workflow, 
+        productUrlParam
+      );
+
+      const newUrlCache = result.cachedUrls ?? {};
+
+      setter(prev => {
+        if (!prev) return null;
+        
+        const updatedRecommendations: FieldRecommendation[] = prev.recommendations.map(field => {
+          if (field.fieldId === 'name') return field; // Keep name as-is
+          const rec = result.recommendations.find(r => r.fieldId === field.fieldId);
+          return {
+            fieldId: field.fieldId,
+            fieldName: field.fieldName,
+            currentValue: field.currentValue,
+            recommendation: rec?.recommendation,
+            confidence: rec?.confidence,
+            reasoning: rec?.reasoning,
+            isOfficialSource: rec?.isOfficialSource,
+            isLoading: false,
+          };
+        });
+
+        return {
+          ...prev,
+          isAnalyzing: false,
+          urlCache: newUrlCache,
+          recommendations: updatedRecommendations,
+        };
+      });
+      
+      toast.success("AI analysis complete!");
+    } catch (error) {
+      console.error('Error auto-generating recommendations:', error);
+      toast.error(error instanceof Error ? error.message : "Failed to generate recommendations");
+      setter(prev => prev ? {
+        ...prev,
+        isAnalyzing: false,
+        recommendations: prev.recommendations.map(r => ({ ...r, isLoading: false }))
+      } : null);
+    }
   };
 
   // Check if name matches the expected format based on workflow
